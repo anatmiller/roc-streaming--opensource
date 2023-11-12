@@ -152,6 +152,9 @@ struct ReceiverSessionConfig {
     //! Packet payload type.
     unsigned int payload_type;
 
+    //! Packet prebuffer length, nanoseconds.
+    core::nanoseconds_t prebuf_len;
+
     //! FEC reader parameters.
     fec::BlockReaderConfig fec_reader;
 
@@ -187,6 +190,9 @@ struct ReceiverSourceConfig {
 
     //! Default parameters for a session.
     ReceiverSessionConfig session_defaults;
+
+    //! Maximum number of packets per session.
+    size_t max_session_packets;
 
     //! Initialize config.
     ReceiverSourceConfig();
