@@ -2181,6 +2181,61 @@ TEST(receiver_source, timestamp_mapping_remixing) {
     CHECK(first_ts);
 }
 
+TEST(receiver_source, packet_buffer) {
+    enum { Rate = SampleRate, Chans = Chans_Stereo, MaxPackets = 10 };
+
+    init(Rate, Chans, Rate, Chans);
+
+    ReceiverSourceConfig config = make_default_config();
+    config.session_defaults.prebuf_len = 0;
+    ReceiverSource receiver(config, encoding_map, packet_pool, packet_buffer_pool,
+                            frame_pool, frame_buffer_pool, arena);
+    LONGS_EQUAL(status::StatusOK, receiver.init_status());
+
+    ReceiverSlot* slot = create_slot(receiver);
+    CHECK(slot);
+
+    packet::FifoQueue queue;
+    packet::FifoQueue source_queue;
+    packet::FifoQueue repair_queue;
+
+    packet::IWriter* source_endpoint_writer = create_transport_endpoint(
+        slot, address::Iface_AudioSource, address::Proto_RTP_RS8M_Source, dst_addr1);
+
+    packet::IWriter* repair_endpoint_writer = create_transport_endpoint(
+        slot, address::Iface_AudioRepair, address::Proto_RS8M_Repair, dst_addr2);
+
+    fec::BlockWriterConfig fec_config;
+
+    test::PacketWriter packet_writer(
+        arena, *source_endpoint_writer, *repair_endpoint_writer, encoding_map,
+        packet_factory, src_id1, src_addr1, dst_addr1, dst_addr2, PayloadType_Ch2,
+        packet::FEC_ReedSolomon_M8, fec_config);
+
+    // setup reader
+    test::FrameReader frame_reader(receiver, frame_factory);
+
+    packet_writer.write_packets(fec_config.n_source_packets, SamplesPerPacket,
+                                output_sample_spec);
+
+    for (int i = 0; i < ManyPackets; ++i) {
+        packet::PacketPtr pp;
+        LONGS_EQUAL(status::StatusOK, queue.read(pp, packet::ModeFetch));
+        CHECK(pp);
+
+        if (pp->flags() & packet::Packet::FlagAudio) {
+            UNSIGNED_LONGS_EQUAL(status::StatusOK, source_queue.write(pp));
+        }
+        if (pp->flags() & packet::Packet::FlagRepair) {
+            UNSIGNED_LONGS_EQUAL(status::StatusOK, repair_queue.write(pp));
+        }
+    }
+
+    LONGS_EQUAL(status::StatusOK, receiver.refresh(frame_reader.refresh_ts(), NULL));
+    frame_reader.read_nonzero_samples(SamplesPerFrame, output_sample_spec);
+    UNSIGNED_LONGS_EQUAL(1, receiver.num_sessions());
+}
+
 // Check receiver metrics for multiple remote participants (senders).
 TEST(receiver_source, metrics_participants) {
     enum { Rate = SampleRate, Chans = Chans_Stereo, MaxParties = 10 };
