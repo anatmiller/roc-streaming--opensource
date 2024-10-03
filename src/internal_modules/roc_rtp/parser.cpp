@@ -25,7 +25,8 @@ status::StatusCode Parser::init_status() const {
     return status::StatusOK;
 }
 
-status::StatusCode Parser::parse(packet::Packet& packet, const core::Slice<uint8_t>& buffer) {
+status::StatusCode Parser::parse(packet::Packet& packet,
+                                 const core::Slice<uint8_t>& buffer) {
     if (buffer.size() < sizeof(Header)) {
         roc_log(LogDebug, "rtp parser: bad packet: size<%d (rtp header)",
                 (int)sizeof(Header));
