@@ -33,7 +33,7 @@ public:
     virtual status::StatusCode init_status() const;
 
     //! Parse packet from buffer.
-    virtual bool parse(packet::Packet& packet, const core::Slice<uint8_t>& buffer);
+    virtual status::StatusCode parse(packet::Packet& packet, const core::Slice<uint8_t>& buffer);
 };
 
 } // namespace rtcp
