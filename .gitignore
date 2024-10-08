@@ -57,3 +57,5 @@ debian/roc
 # personal
 /Makefile
 .unisonignore
+.ccls
+scons.sh
