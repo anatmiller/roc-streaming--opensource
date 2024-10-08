@@ -30,10 +30,8 @@ Communicator::Communicator(const Config& config,
                            packet::IWriter& packet_writer,
                            packet::IComposer& packet_composer,
                            packet::PacketFactory& packet_factory,
-                           core::BufferFactory<uint8_t>& buffer_factory,
                            core::IArena& arena)
     : packet_factory_(packet_factory)
-    , buffer_factory_(buffer_factory)
     , packet_writer_(packet_writer)
     , packet_composer_(packet_composer)
     , config_(config)
@@ -52,15 +50,15 @@ Communicator::Communicator(const Config& config,
     , processed_packet_count_(0)
     , generated_packet_count_(0)
     , log_limiter_(LogInterval)
-    , valid_(false) {
-    if (!reporter_.is_valid()) {
+    , init_status_(status::NoStatus) {
+    if ((init_status_ = reporter_.init_status()) != status::StatusOK) {
         return;
     }
-    valid_ = true;
+    init_status_ = status::StatusOK;
 }
 
-bool Communicator::is_valid() const {
-    return valid_;
+status::StatusCode Communicator::init_status() const {
+    return init_status_;
 }
 
 size_t Communicator::total_destinations() const {
@@ -73,7 +71,7 @@ size_t Communicator::total_streams() const {
 
 status::StatusCode Communicator::process_packet(const packet::PacketPtr& packet,
                                                 core::nanoseconds_t current_time) {
-    roc_panic_if(!is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if_msg(!packet, "rtcp communicator: null packet");
     roc_panic_if_msg(!packet->udp(), "rtcp communicator: non-udp packet");
@@ -332,7 +330,7 @@ void Communicator::process_extended_report_(const XrTraverser& xr) {
 }
 
 core::nanoseconds_t Communicator::generation_deadline(core::nanoseconds_t current_time) {
-    roc_panic_if(!is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if_msg(current_time <= 0,
                      "rtcp communicator: invalid timestamp:"
@@ -349,7 +347,7 @@ core::nanoseconds_t Communicator::generation_deadline(core::nanoseconds_t curren
 }
 
 status::StatusCode Communicator::generate_reports(core::nanoseconds_t current_time) {
-    roc_panic_if(!is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if_msg(current_time <= 0,
                      "rtcp communicator: invalid timestamp:"
@@ -380,7 +378,7 @@ status::StatusCode Communicator::generate_reports(core::nanoseconds_t current_ti
 }
 
 status::StatusCode Communicator::generate_goodbye(core::nanoseconds_t current_time) {
-    roc_panic_if(!is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if_msg(current_time <= 0, "rtcp communicator: invalid timestamp");
 
@@ -478,8 +476,8 @@ bool Communicator::continue_packet_generation_() {
         }
 
         if (dest_addr_index_ >= dest_addr_count_) {
-            // We've reported all blocks for all destination addesses (or maybe
-            // there are no destination addesses), exit generation.
+            // We've reported all blocks for all destination addresses (or maybe
+            // there are no destination addresses), exit generation.
             return false;
         }
 
@@ -553,7 +551,7 @@ status::StatusCode Communicator::generate_packet_(PacketType packet_type,
     }
 
     // Buffer for RTCP packet data
-    core::Slice<uint8_t> payload_buffer = buffer_factory_.new_buffer();
+    core::Slice<uint8_t> payload_buffer = packet_factory_.new_packet_buffer();
     if (!payload_buffer) {
         roc_log(LogError, "rtcp communicator: can't create buffer");
         return status::StatusNoMem;
@@ -567,10 +565,10 @@ status::StatusCode Communicator::generate_packet_(PacketType packet_type,
     }
 
     // Buffer for the whole packet. If RTCP composer is nested into another
-    // composer, packet_data may hold additionals headers or footers around
+    // composer, packet_data may hold additional headers or footers around
     // RTCP. If RTCP composer is the topmost, packet_data and rtcp_data
     // will be identical.
-    core::Slice<uint8_t> packet_buffer = buffer_factory_.new_buffer();
+    core::Slice<uint8_t> packet_buffer = packet_factory_.new_packet_buffer();
     if (!packet_buffer) {
         roc_log(LogError, "rtcp communicator: can't create buffer");
         return status::StatusNoMem;
@@ -580,7 +578,7 @@ status::StatusCode Communicator::generate_packet_(PacketType packet_type,
     // Prepare packet to be able to hold our RTCP packet data
     if (!packet_composer_.prepare(*packet, packet_buffer, payload_buffer.size())) {
         roc_log(LogError, "rtcp communicator: can't prepare packet");
-        return status::StatusNoSpace;
+        return status::StatusNoMem;
     }
     packet->add_flags(packet::Packet::FlagPrepared);
 
@@ -630,12 +628,12 @@ Communicator::generate_packet_payload_(PacketType packet_type,
                 // Even one block can't fit into the buffer, so all we
                 // can do is to report failure and exit.
                 max_pkt_streams_ = 1;
-                return status::StatusNoSpace;
+                return status::StatusNoMem;
             }
 
             // Repeat current packet generation with reduced limit.
             // We will eventually either find value for max_pkt_blocks_
-            // that does not cause errors, or report StatusNoSpace (see above).
+            // that does not cause errors, or report StatusNoMem (see above).
             // Normally this search will happen only once and then the
             // found value of max_pkt_blocks_ will be reused.
             max_pkt_streams_ = cur_pkt_send_stream_ + cur_pkt_recv_stream_ - 1;

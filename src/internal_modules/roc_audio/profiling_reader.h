@@ -28,14 +28,15 @@ public:
     //! Initialization.
     ProfilingReader(IFrameReader& reader,
                     core::IArena& arena,
-                    const audio::SampleSpec& sample_spec,
+                    const SampleSpec& sample_spec,
                     ProfilerConfig profiler_config);
 
-    //! Check if the profiler was succefully constructed.
-    bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Read audio frame.
-    virtual bool read(Frame& frame);
+    virtual ROC_ATTR_NODISCARD status::StatusCode
+    read(Frame& frame, packet::stream_timestamp_t duration, FrameReadMode mode);
 
 private:
     core::nanoseconds_t read_(Frame& frame, bool& ret);

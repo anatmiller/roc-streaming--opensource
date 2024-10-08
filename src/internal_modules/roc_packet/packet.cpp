@@ -17,15 +17,15 @@ Packet::Packet(core::IPool& packet_pool)
     , flags_(0) {
 }
 
-void Packet::add_flags(unsigned fl) {
-    if (flags_ & fl) {
+void Packet::add_flags(unsigned flags) {
+    if (flags_ & flags) {
         roc_panic("packet: can't add flag more than once");
     }
-    flags_ |= fl;
+    flags_ |= flags;
 }
 
-bool Packet::has_flags(unsigned fl) const {
-    return (flags_ & fl) != 0;
+bool Packet::has_flags(unsigned flags) const {
+    return (flags_ & flags) == flags;
 }
 
 unsigned Packet::flags() const {
@@ -184,6 +184,13 @@ int Packet::compare(const Packet& other) const {
     }
 
     return 0;
+}
+
+size_t Packet::approx_size(size_t n_samples) {
+    const size_t approx_header_size = 64;
+    const size_t approx_sample_size = 2;
+
+    return approx_header_size + n_samples * approx_sample_size;
 }
 
 } // namespace packet

@@ -20,7 +20,7 @@ syntax                     meaning                    example
 ``file://-`` or ``file:-`` stdin or stdout            ``file:-``
 ========================== ========================== ==============
 
-User can specify input file/device (**source**) for ``roc-send`` via ``--input`` option, and output file/device (**sink**) for ``roec-recv`` via ``--output`` option.
+User can specify input file/device (**source**) for ``roc-send`` via ``--input`` option, and output file/device (**sink**) for ``roc-recv`` via ``--output`` option.
 
 When device is used, user specifies driver explicitly (e.g. ``alsa://`` for ALSA, ``pulse://`` for PulseAudio, etc). When file is used, file driver is selected automatically, usually by file extension. However, user may force usage of specific driver for the file via ``--input-format`` or ``--output-format`` option.
 
@@ -45,7 +45,7 @@ The job of ``roc-send`` and ``roc-recv`` is thus to open a source and a sink and
 
 - in ``roc-recv``, ``ISource`` is implemented by receiver pipeline from ``roc_pipeline``, and ``ISink`` is implemented by device or file from ``roc_sndio``
 
-The task of transferring sound from ``ISource`` to ``ISink`` is implemented in `sndio::Pump <https://roc-streaming.org/toolkit/doxygen/classroc_1_1sndio_1_1Pump.html>`_ class, which works uniformely with any pair of source and sink, being it file, device, or pipeline.
+The task of transferring sound from ``ISource`` to ``ISink`` is implemented in `sndio::IoPump <https://roc-streaming.org/toolkit/doxygen/classroc_1_1sndio_1_1IoPump.html>`_ class, which works uniformly with any pair of source and sink, being it file, device, or pipeline.
 
 Backends and drivers
 ====================
@@ -56,9 +56,9 @@ Every **backend** (`IBackend <https://roc-streaming.org/toolkit/doxygen/classroc
 
 For example, SoxBackend (backend that implements audio I/O using SoX library) implements several device and file drivers: ``alsa``, ``pulse``, ``mp3``, etc. Every device driver corresponds to particular sound system (e.g. ALSA, PulseAudio), and every file driver corresponds to particular file format (e.g. MP3).
 
-When user asks backend dispatcher to open sink or source, user speicifies I/O URI and, for files, optional file format (i.e. driver name). Backend dispatcher then finds backend which is able to handle given device or file and asks it to create its implementation of ``ISource`` or ``ISink``.
+When user asks backend dispatcher to open sink or source, user specifies I/O URI and, for files, optional file format (i.e. driver name). Backend dispatcher then finds backend which is able to handle given device or file and asks it to create its implementation of ``ISource`` or ``ISink``.
 
-To help backend dispatcher with making decision, backends provide **driver information** about every available driver:
+To help backend dispatcher with making decision, backends provide **driver information** (`DriverInfo <https://roc-streaming.org/toolkit/doxygen/classroc_1_1sndio_1_1DriverInfo.html>`_) about every available driver:
 
 * *driver name* -- short unique string, for devices same as URI scheme (e.g. ``alsa``), for files usually same as file extension (e.g. ``mp3``)
 * *driver type* -- whether it's device or file driver
@@ -76,6 +76,8 @@ The following table lists implemented audio backends:
 ==================== =========== ===============
 backend              drivers     description
 ==================== =========== ===============
-SoxBackend           many        universal backend that supports many audio systems and file formats using libsox
 PulseaudioBackend    ``pulse``   native PulseAudio backend using libpulse
+SndfileBackend       many        read and write various audio files using libsndfile
+WavBackend           ``wav``     read and write audio files without external dependencies
+SoxBackend           many        universal backend that supports many audio systems and file formats using libsox
 ==================== =========== ===============

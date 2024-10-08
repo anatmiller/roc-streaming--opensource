@@ -12,50 +12,120 @@
 namespace roc {
 namespace pipeline {
 
-SenderConfig::SenderConfig()
+// SenderSinkConfig
+
+SenderSinkConfig::SenderSinkConfig()
     : input_sample_spec(DefaultSampleSpec)
-    , packet_length(DefaultPacketLength)
     , payload_type(rtp::PayloadType_L16_Stereo)
-    , enable_interleaving(false)
-    , enable_timing(false)
-    , enable_auto_duration(false)
+    , packet_length(DefaultPacketLength)
+    , enable_cpu_clock(false)
     , enable_auto_cts(false)
+    , enable_interleaving(false)
     , enable_profiling(false) {
 }
 
-void SenderConfig::deduce_defaults() {
-    latency.deduce_defaults(DefaultLatency, false);
-    resampler.deduce_defaults(latency.tuner_backend, latency.tuner_profile);
+bool SenderSinkConfig::deduce_defaults(audio::ProcessorMap& processor_map) {
+    if (!latency.deduce_defaults(DefaultLatency, false)) {
+        return false;
+    }
+
+    if (!freq_est.deduce_defaults(latency.tuner_profile)) {
+        return false;
+    }
+
+    if (!resampler.deduce_defaults(processor_map, latency.tuner_backend,
+                                   latency.tuner_profile)) {
+        return false;
+    }
+
+    return true;
 }
+
+// SenderSlotConfig
+
+SenderSlotConfig::SenderSlotConfig() {
+}
+
+bool SenderSlotConfig::deduce_defaults() {
+    return true;
+}
+
+// ReceiverCommonConfig
+
+ReceiverCommonConfig::ReceiverCommonConfig()
+    : output_sample_spec(DefaultSampleSpec)
+    , enable_cpu_clock(false)
+    , enable_auto_reclock(false)
+    , enable_profiling(false) {
+}
+
+bool ReceiverCommonConfig::deduce_defaults(audio::ProcessorMap& processor_map) {
+    return true;
+}
+
+// ReceiverSessionConfig
 
 ReceiverSessionConfig::ReceiverSessionConfig()
     : payload_type(0) {
 }
 
-void ReceiverSessionConfig::deduce_defaults() {
-    latency.deduce_defaults(DefaultLatency, true);
-    watchdog.deduce_defaults(latency.target_latency);
-    resampler.deduce_defaults(latency.tuner_backend, latency.tuner_profile);
+bool ReceiverSessionConfig::deduce_defaults(audio::ProcessorMap& processor_map) {
+    if (!plc.deduce_defaults()) {
+        return false;
+    }
+
+    if (!latency.deduce_defaults(DefaultLatency, true)) {
+        return false;
+    }
+
+    if (!jitter_meter.deduce_defaults(latency.tuner_profile)) {
+        return false;
+    }
+
+    if (!freq_est.deduce_defaults(latency.tuner_profile)) {
+        return false;
+    }
+
+    if (!resampler.deduce_defaults(processor_map, latency.tuner_backend,
+                                   latency.tuner_profile)) {
+        return false;
+    }
+
+    if (!watchdog.deduce_defaults(DefaultLatency, latency.target_latency)) {
+        return false;
+    }
+
+    return true;
 }
 
-ReceiverCommonConfig::ReceiverCommonConfig()
-    : output_sample_spec(DefaultSampleSpec)
-    , enable_timing(false)
-    , enable_auto_reclock(false)
-    , enable_profiling(false)
-    , enable_beeping(false) {
+// ReceiverSourceConfig
+
+ReceiverSourceConfig::ReceiverSourceConfig() {
 }
 
-void ReceiverCommonConfig::deduce_defaults() {
+bool ReceiverSourceConfig::deduce_defaults(audio::ProcessorMap& processor_map) {
+    if (!common.deduce_defaults(processor_map)) {
+        return false;
+    }
+
+    if (!session_defaults.deduce_defaults(processor_map)) {
+        return false;
+    }
+
+    return true;
 }
 
-ReceiverConfig::ReceiverConfig() {
+// ReceiverSlotConfig
+
+ReceiverSlotConfig::ReceiverSlotConfig()
+    : enable_routing(true) {
 }
 
-void ReceiverConfig::deduce_defaults() {
-    default_session.deduce_defaults();
-    common.deduce_defaults();
+bool ReceiverSlotConfig::deduce_defaults() {
+    return true;
 }
+
+// TranscoderConfig
 
 TranscoderConfig::TranscoderConfig()
     : input_sample_spec(DefaultSampleSpec)
@@ -63,9 +133,13 @@ TranscoderConfig::TranscoderConfig()
     , enable_profiling(false) {
 }
 
-void TranscoderConfig::deduce_defaults() {
-    resampler.deduce_defaults(audio::LatencyTunerBackend_Default,
-                              audio::LatencyTunerProfile_Default);
+bool TranscoderConfig::deduce_defaults(audio::ProcessorMap& processor_map) {
+    if (!resampler.deduce_defaults(processor_map, audio::LatencyTunerBackend_Auto,
+                                   audio::LatencyTunerProfile_Auto)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace pipeline

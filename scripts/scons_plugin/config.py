@@ -66,10 +66,30 @@ def _compose_pkg_config_path(env, add_prefix):
         # priority); otherwise use original PKG_CONFIG_PATH is propagated explicitly
         add_pkg_config_path = os.path.join(add_prefix, 'lib', 'pkgconfig')
         if os.path.isdir(add_pkg_config_path):
-            if len(pkg_config_path) > 0:
+            if pkg_config_path:
                 pkg_config_path += ':'
             pkg_config_path += add_pkg_config_path
     return pkg_config_path
+
+# Workaround for brew / pkg-config weirdeness
+def _fix_brew_libpath(libpath):
+    if not '/Cellar/' in libpath:
+        return libpath # not in brew (quick check)
+
+    if libpath.endswith('/lib'):
+        return libpath # looks good
+
+    brew_prefix = env.GetCommandOutput('brew --prefix')
+    if not brew_prefix:
+        return libpath # can't help
+
+    if not libpath.startswith(brew_prefix+'/Cellar/'):
+        return libpath # not in brew
+
+    if not os.path.isdir(libpath+'/lib'):
+        return libpath # can't help
+
+    return libpath+'/lib'
 
 def CheckLibWithHeaderExt(context, libs, headers, language, expr='1', run=True):
     if not isinstance(headers, list):
@@ -452,35 +472,23 @@ def FindPkgConfigPath(context, prefix):
         context.Result(env['PKG_CONFIG_PATH'])
         return True
 
-    # https://linux.die.net/man/1/pkg-config the default is libdir/pkgconfig
-    env['PKG_CONFIG_PATH'] = os.path.join(env['ROC_SYSTEM_LIBDIR'], 'pkgconfig')
-
     pkg_config = env.get('PKG_CONFIG', None)
     if pkg_config:
-        pkg_config_paths = env.GetCommandOutput(
+        pkg_config_path = env.GetCommandOutput(
             '{pkg_config_cmd} --variable pc_path pkg-config'.format(
                 pkg_config_cmd=quote(pkg_config)))
-        try:
-            path_list = pkg_config_paths.split(':')
-            def _select_path():
-                for path in path_list:
-                    if path.startswith(prefix) and os.path.isdir(path):
-                        return path
-                for path in path_list:
-                    if path.startswith(prefix):
-                        return path
+        if pkg_config_path:
+            env['PKG_CONFIG_PATH'] = pkg_config_path
+            context.Result(env['PKG_CONFIG_PATH'])
+            return True
 
-            path = _select_path()
-            if path:
-                env['PKG_CONFIG_PATH'] = path
-        except:
-            pass
-
+    # https://linux.die.net/man/1/pkg-config the default is libdir/pkgconfig
+    env['PKG_CONFIG_PATH'] = os.path.join(env['ROC_SYSTEM_LIBDIR'], 'pkgconfig')
     context.Result(env['PKG_CONFIG_PATH'])
     return True
 
 def AddPkgConfigDependency(context, package, flags,
-                           add_prefix=None, exclude_from_pc=False):
+                           add_prefix=None, exclude_from_pc=False, exclude_libs=[]):
     context.Message("Searching pkg-config package {} ...".format(package))
 
     env = context.env
@@ -497,7 +505,22 @@ def AddPkgConfigDependency(context, package, flags,
 
     cmd += [pkg_config, package, '--silence-errors'] + flags.split()
     try:
+        old_libs = env['LIBS'][:]
+        old_dirs = env['LIBPATH'][:]
+
         env.ParseConfig(cmd)
+
+        new_libs = env['LIBS'][:]
+        new_dirs = env['LIBPATH'][:]
+
+        for lib in exclude_libs:
+            if lib not in old_libs and lib in new_libs:
+                env['LIBS'].remove(lib)
+
+        for n, libpath in enumerate(new_dirs):
+            if not libpath in old_dirs:
+                env['LIBPATH'][n] = _fix_brew_libpath(libpath)
+
         if not exclude_from_pc:
             if '_DEPS_PCFILES' not in env.Dictionary():
                 env['_DEPS_PCFILES'] = []

@@ -19,6 +19,7 @@
 #include "roc_node/context.h"
 #include "roc_node/node.h"
 #include "roc_packet/concurrent_queue.h"
+#include "roc_packet/packet_factory.h"
 #include "roc_pipeline/ipipeline_task_scheduler.h"
 #include "roc_pipeline/receiver_loop.h"
 #include "roc_status/status_code.h"
@@ -30,13 +31,14 @@ namespace node {
 class ReceiverDecoder : public Node, private pipeline::IPipelineTaskScheduler {
 public:
     //! Initialize.
-    ReceiverDecoder(Context& context, const pipeline::ReceiverConfig& pipeline_config);
+    ReceiverDecoder(Context& context,
+                    const pipeline::ReceiverSourceConfig& pipeline_config);
 
     //! Deinitialize.
     ~ReceiverDecoder();
 
-    //! Check if successfully constructed.
-    bool is_valid();
+    //! Check if the node was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Activate interface.
     ROC_ATTR_NODISCARD bool activate(address::Interface iface, address::Protocol proto);
@@ -55,18 +57,23 @@ public:
     ROC_ATTR_NODISCARD bool get_metrics(slot_metrics_func_t slot_metrics_func,
                                         void* slot_metrics_arg,
                                         party_metrics_func_t party_metrics_func,
-                                        size_t* party_metrics_size,
                                         void* party_metrics_arg);
 
     //! Write packet for decoding.
-    ROC_ATTR_NODISCARD status::StatusCode write_packet(address::Interface iface,
-                                                       const packet::PacketPtr& packet);
+    ROC_ATTR_NODISCARD status::StatusCode
+    write_packet(address::Interface iface, const void* bytes, size_t n_bytes);
 
     //! Read encoded packet.
     //! @note
     //!  Typically used to generate control packets with feedback for sender.
-    ROC_ATTR_NODISCARD status::StatusCode read_packet(address::Interface iface,
-                                                      packet::PacketPtr& packet);
+    ROC_ATTR_NODISCARD status::StatusCode
+    read_packet(address::Interface iface, void* bytes, size_t* n_bytes);
+
+    //! Read frame into byte buffer.
+    //! @remarks
+    //!  Performs necessary checks and allocations on top of ISource::read(),
+    //!  needed when working with byte buffers instead of Frame objects.
+    ROC_ATTR_NODISCARD status::StatusCode read_frame(void* bytes, size_t n_bytes);
 
     //! Source for reading decoded frames.
     sndio::ISource& source();
@@ -76,7 +83,7 @@ private:
                                           core::nanoseconds_t delay);
     virtual void cancel_task_processing(pipeline::PipelineLoop&);
 
-    core::Mutex mutex_;
+    core::Mutex control_mutex_;
 
     address::SocketAddr bind_address_;
 
@@ -88,10 +95,15 @@ private:
     pipeline::ReceiverLoop::SlotHandle slot_;
     ctl::ControlLoop::Tasks::PipelineProcessing processing_task_;
 
-    pipeline::ReceiverSlotMetrics slot_metrics_;
-    core::Array<pipeline::ReceiverParticipantMetrics, 8> party_metrics_;
+    packet::PacketFactory packet_factory_;
 
-    bool valid_;
+    core::Mutex frame_mutex_;
+
+    audio::FrameFactory frame_factory_;
+    audio::FramePtr frame_;
+    audio::SampleSpec sample_spec_;
+
+    status::StatusCode init_status_;
 };
 
 } // namespace node

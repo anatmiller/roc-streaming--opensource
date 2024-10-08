@@ -12,10 +12,10 @@
 #ifndef ROC_CORE_LIST_H_
 #define ROC_CORE_LIST_H_
 
+#include "roc_core/list_impl.h"
 #include "roc_core/list_node.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/ownership_policy.h"
-#include "roc_core/panic.h"
 #include "roc_core/stddefs.h"
 
 namespace roc {
@@ -26,12 +26,17 @@ namespace core {
 //! Does not perform allocations.
 //! Provides O(1) size check, membership check, insertion, and removal.
 //!
-//! @tparam T defines object type, it should inherit ListNode.
+//! @tparam T defines object type, it must inherit ListNode.
 //!
 //! @tparam OwnershipPolicy defines ownership policy which is used to acquire an
 //! element ownership when it's added to the list and release ownership when it's
 //! removed from the list.
-template <class T, template <class TT> class OwnershipPolicy = RefCountedOwnership>
+//!
+//! @tparam Node defines base class of list nodes. It is needed if ListNode is
+//! used with non-default tag.
+template <class T,
+          template <class TT> class OwnershipPolicy = RefCountedOwnership,
+          class Node = ListNode<> >
 class List : public NonCopyable<> {
 public:
     //! Pointer type.
@@ -40,125 +45,104 @@ public:
     typedef typename OwnershipPolicy<T>::Pointer Pointer;
 
     //! Initialize empty list.
-    List()
-        : size_(0) {
-        head_.prev = &head_;
-        head_.next = &head_;
-        head_.list = this;
+    List() {
     }
 
     //! Release ownership of containing objects.
     ~List() {
-        ListNode::ListNodeData* next_data;
-
-        for (ListNode::ListNodeData* data = head_.next; data != &head_;
-             data = next_data) {
-            roc_panic_if(data == NULL);
-            check_is_member_(data, this);
-
-            next_data = data->next;
-            data->list = NULL;
-
-            OwnershipPolicy<T>::release(*container_of_(data));
+        while (!is_empty()) {
+            pop_back();
         }
-
-        head_.list = NULL;
     }
 
     //! Get number of elements in list.
     size_t size() const {
-        return size_;
+        return impl_.size();
     }
 
     //! Check if size is zero.
     bool is_empty() const {
-        return size_ == 0;
+        return impl_.size() == 0;
     }
 
     //! Check if element belongs to list.
-    bool contains(const T& element) {
-        const ListNode::ListNodeData* data = element.list_node_data();
-        return (data->list == this);
+    bool contains(const T& elem) {
+        const ListData* data = to_node_data_(elem);
+        return impl_.contains(data);
     }
 
     //! Get first list element.
     //! @returns
     //!  first element or NULL if list is empty.
     Pointer front() const {
-        if (size_ == 0) {
-            return NULL;
-        }
-        return container_of_(head_.next);
+        ListData* data = impl_.front();
+        return from_node_data_(data);
     }
 
     //! Get last list element.
     //! @returns
     //!  last element or NULL if list is empty.
     Pointer back() const {
-        if (size_ == 0) {
-            return NULL;
-        }
-        return container_of_(head_.prev);
+        ListData* data = impl_.back();
+        return from_node_data_(data);
     }
 
     //! Get list element next to given one.
     //!
     //! @returns
-    //!  list element following @p element if @p element is not
+    //!  list element following @p elem if @p elem is not
     //!  last, or NULL otherwise.
     //!
     //! @pre
-    //!  @p element should be member of this list.
-    Pointer nextof(T& element) const {
-        ListNode::ListNodeData* data = element.list_node_data();
-        check_is_member_(data, this);
-
-        if (data->next == &head_) {
-            return NULL;
-        }
-        return container_of_(data->next);
+    //!  @p elem should be member of this list.
+    Pointer nextof(T& elem) const {
+        ListData* data = to_node_data_(elem);
+        ListData* next_data = impl_.nextof(data);
+        return from_node_data_(next_data);
     }
 
     //! Get list element previous to given one.
     //!
     //! @returns
-    //!  list element preceeding @p element if @p element is not
+    //!  list element preceding @p elem if @p elem is not
     //!  first, or NULL otherwise.
     //!
     //! @pre
-    //!  @p element should be member of this list.
-    Pointer prevof(T& element) const {
-        ListNode::ListNodeData* data = element.list_node_data();
-        check_is_member_(data, this);
-
-        if (data->prev == &head_) {
-            return NULL;
-        }
-        return container_of_(data->prev);
+    //!  @p elem should be member of this list.
+    Pointer prevof(T& elem) const {
+        ListData* data = to_node_data_(elem);
+        ListData* prev_data = impl_.prevof(data);
+        return from_node_data_(prev_data);
     }
 
     //! Prepend element to list.
     //!
     //! @remarks
-    //!  - prepends @p element to list
-    //!  - acquires ownership of @p element
+    //!  - prepends @p elem to list
+    //!  - acquires ownership of @p elem
     //!
     //! @pre
-    //!  @p element should not be member of any list.
-    void push_front(T& element) {
-        insert_(element, head_.next);
+    //!  @p elem should not be member of any list.
+    void push_front(T& elem) {
+        OwnershipPolicy<T>::acquire(elem);
+
+        ListData* data = to_node_data_(elem);
+        impl_.insert(data, impl_.head()->next);
     }
 
     //! Append element to list.
     //!
     //! @remarks
-    //!  - appends @p element to list
-    //!  - acquires ownership of @p element
+    //!  - appends @p elem to list
+    //!  - acquires ownership of @p elem
     //!
     //! @pre
-    //!  @p element should not be member of any list.
-    void push_back(T& element) {
-        insert_(element, &head_);
+    //!  @p elem should not be member of any list.
+    void push_back(T& elem) {
+        OwnershipPolicy<T>::acquire(elem);
+
+        ListData* data = to_node_data_(elem);
+        impl_.insert(data, impl_.head());
     }
 
     //! Pop first element from list.
@@ -170,10 +154,10 @@ public:
     //! @pre
     //!  the list should not be empty.
     void pop_front() {
-        if (size_ == 0) {
-            roc_panic("list: is empty");
-        }
-        remove_(*container_of_(head_.next));
+        ListData* data = impl_.pop_front();
+        T* elem = from_node_data_(data);
+
+        OwnershipPolicy<T>::release(*elem);
     }
 
     //! Pop last element from list.
@@ -185,96 +169,71 @@ public:
     //! @pre
     //!  the list should not be empty.
     void pop_back() {
-        if (size_ == 0) {
-            roc_panic("list: is empty");
-        }
-        remove_(*container_of_(head_.prev));
+        ListData* data = impl_.pop_back();
+        T* elem = from_node_data_(data);
+
+        OwnershipPolicy<T>::release(*elem);
     }
 
     //! Insert element into list.
     //!
     //! @remarks
-    //!  - inserts @p element before @p before
-    //!  - acquires ownership of @p element
+    //!  - inserts @p elem before @p before
+    //!  - acquires ownership of @p elem
     //!
     //! @pre
-    //!  @p element should not be member of any list.
+    //!  @p elem should not be member of any list.
     //!  @p before should be member of this list or NULL.
-    void insert_before(T& element, T& before) {
-        insert_(element, before.list_node_data());
+    void insert_before(T& elem, T& before) {
+        OwnershipPolicy<T>::acquire(elem);
+
+        ListData* data = to_node_data_(elem);
+        ListData* data_before = to_node_data_(before);
+        impl_.insert(data, data_before);
     }
 
     //! Insert element into list.
     //!
     //! @remarks
-    //!  - inserts @p element after @p after
-    //!  - acquires ownership of @p element
+    //!  - inserts @p elem after @p after
+    //!  - acquires ownership of @p elem
     //!
     //! @pre
-    //!  @p element should not be member of any list.
+    //!  @p elem should not be member of any list.
     //!  @p after should be member of this list.
-    void insert_after(T& element, T& after) {
-        insert_(element, after.list_node_data()->next);
+    void insert_after(T& elem, T& after) {
+        OwnershipPolicy<T>::acquire(elem);
+
+        ListData* data = to_node_data_(elem);
+        ListData* data_after = to_node_data_(after);
+        impl_.insert(data, data_after->next);
     }
 
     //! Remove element from list.
     //!
     //! @remarks
-    //!  - removes @p element from list
-    //!  - releases ownership of @p element
+    //!  - removes @p elem from list
+    //!  - releases ownership of @p elem
     //!
     //! @pre
-    //!  @p element should be member of this list.
-    void remove(T& element) {
-        remove_(element);
+    //!  @p elem should be member of this list.
+    void remove(T& elem) {
+        ListData* data = to_node_data_(elem);
+        impl_.remove(data);
+
+        OwnershipPolicy<T>::release(elem);
     }
 
 private:
-    static T* container_of_(ListNode::ListNodeData* data) {
-        return static_cast<T*>(data->container_of());
+    static ListData* to_node_data_(const T& elem) {
+        return static_cast<const Node&>(elem).list_data();
     }
 
-    static void check_is_member_(const ListNode::ListNodeData* data, const List* list) {
-        if (data->list != list) {
-            roc_panic("list: element is member of wrong list: expected %p, got %p",
-                      (const void*)list, (const void*)data->list);
-        }
+    static T* from_node_data_(ListData* data) {
+        return static_cast<T*>(static_cast<Node*>(Node::list_node(data)));
     }
 
-    void insert_(T& element, ListNode::ListNodeData* data_before) {
-        ListNode::ListNodeData* data_new = element.list_node_data();
-        check_is_member_(data_new, NULL);
-        check_is_member_(data_before, this);
-
-        data_new->next = data_before;
-        data_new->prev = data_before->prev;
-
-        data_before->prev->next = data_new;
-        data_before->prev = data_new;
-
-        data_new->list = this;
-
-        size_++;
-
-        OwnershipPolicy<T>::acquire(element);
-    }
-
-    void remove_(T& element) {
-        ListNode::ListNodeData* data = element.list_node_data();
-        check_is_member_(data, this);
-
-        data->prev->next = data->next;
-        data->next->prev = data->prev;
-
-        data->list = NULL;
-
-        size_--;
-
-        OwnershipPolicy<T>::release(element);
-    }
-
-    ListNode::ListNodeData head_;
-    size_t size_;
+    ListImpl impl_;
 };
 
 } // namespace core

@@ -12,12 +12,13 @@
 #ifndef ROC_NODE_CONTEXT_H_
 #define ROC_NODE_CONTEXT_H_
 
+#include "roc_audio/processor_map.h"
 #include "roc_audio/sample.h"
 #include "roc_core/allocation_policy.h"
 #include "roc_core/atomic.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
 #include "roc_core/ref_counted.h"
+#include "roc_core/slab_pool.h"
 #include "roc_ctl/control_loop.h"
 #include "roc_netio/network_loop.h"
 #include "roc_packet/packet_factory.h"
@@ -41,28 +42,34 @@ struct ContextConfig {
 };
 
 //! Node context.
-class Context : public core::RefCounted<Context, core::ManualAllocation> {
+class Context : public core::RefCounted<Context, core::NoopAllocation> {
 public:
     //! Initialize.
-    explicit Context(const ContextConfig& config, core::IArena& arena);
+    Context(const ContextConfig& config, core::IArena& arena);
 
     //! Deinitialize.
     ~Context();
 
-    //! Check if successfully constructed.
-    bool is_valid();
+    //! Check if context was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Get arena.
     core::IArena& arena();
 
-    //! Get packet factory.
-    packet::PacketFactory& packet_factory();
+    //! Get packet pool.
+    core::IPool& packet_pool();
 
-    //! Get byte buffer factory.
-    core::BufferFactory<uint8_t>& byte_buffer_factory();
+    //! Get packet buffer pool.
+    core::IPool& packet_buffer_pool();
 
-    //! Get sample buffer factory.
-    core::BufferFactory<audio::sample_t>& sample_buffer_factory();
+    //! Get frame pool.
+    core::IPool& frame_pool();
+
+    //! Get frame buffer pool.
+    core::IPool& frame_buffer_pool();
+
+    //! Get processor map.
+    audio::ProcessorMap& processor_map();
 
     //! Get encoding map.
     rtp::EncodingMap& encoding_map();
@@ -76,14 +83,19 @@ public:
 private:
     core::IArena& arena_;
 
-    packet::PacketFactory packet_factory_;
-    core::BufferFactory<uint8_t> byte_buffer_factory_;
-    core::BufferFactory<audio::sample_t> sample_buffer_factory_;
+    core::SlabPool<packet::Packet> packet_pool_;
+    core::SlabPool<core::Buffer> packet_buffer_pool_;
 
+    core::SlabPool<audio::Frame> frame_pool_;
+    core::SlabPool<core::Buffer> frame_buffer_pool_;
+
+    audio::ProcessorMap processor_map_;
     rtp::EncodingMap encoding_map_;
 
     netio::NetworkLoop network_loop_;
     ctl::ControlLoop control_loop_;
+
+    status::StatusCode init_status_;
 };
 
 } // namespace node

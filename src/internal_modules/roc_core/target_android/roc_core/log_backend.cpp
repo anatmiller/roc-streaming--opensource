@@ -6,10 +6,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <android/log.h>
-
-#include "roc_core/log.h"
 #include "roc_core/log_backend.h"
+#include "roc_core/log.h"
+
+#include <android/log.h>
 
 namespace roc {
 namespace core {
@@ -24,13 +24,16 @@ int level_to_android(LogLevel level) {
     case LogInfo:
         return ANDROID_LOG_INFO;
 
+    case LogNote:
     case LogDebug:
+        return ANDROID_LOG_DEBUG;
+
     case LogTrace:
     case LogNone:
         break;
     }
 
-    return ANDROID_LOG_DEBUG;
+    return ANDROID_LOG_VERBOSE;
 }
 
 } // namespace

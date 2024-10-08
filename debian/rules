@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+export DEB_HOST_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 export DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 export DEB_BUILD_GNU_TYPE
 export DEB_BUILD_OPTIONS = nocheck
@@ -11,12 +12,14 @@ override_dh_auto_clean:
 	scons clean
 
 override_dh_auto_build:
-	scons --prefix=/usr --host=${DEB_HOST_MULTIARCH} \
-		--build-3rdparty=libuv,libunwind,speexdsp,sox,openssl,openfec
+	scons --prefix=/usr --host=${DEB_HOST_GNU_TYPE} \
+		--libdir=/usr/lib/${DEB_HOST_MULTIARCH} \
+		--build-3rdparty=libuv,libunwind,speexdsp,sox,sndfile,openssl,openfec
 
 override_dh_auto_install:
-	scons --prefix=/usr --host=${DEB_HOST_MULTIARCH} \
-		--build-3rdparty=libuv,libunwind,speexdsp,sox,openssl,openfec \
+	scons --prefix=/usr --host=${DEB_HOST_GNU_TYPE} \
+		--libdir=/usr/lib/${DEB_HOST_MULTIARCH} \
+		--build-3rdparty=libuv,libunwind,speexdsp,sox,sndfile,openssl,openfec \
 		install DESTDIR=debian/tmp
 
 override_dh_shlibdeps:

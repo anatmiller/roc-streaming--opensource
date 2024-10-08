@@ -28,8 +28,14 @@ public:
     //! @remarks
     //!  Parses FECFRAME header or footer and passes the rest to @p inner_parser
     //!  if it's not null.
-    explicit Parser(packet::IParser* inner_parser)
-        : inner_parser_(inner_parser) {
+    Parser(packet::IParser* inner_parser, core::IArena& arena)
+        : IParser(arena)
+        , inner_parser_(inner_parser) {
+    }
+
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const {
+        return status::StatusOK;
     }
 
     //! Parse packet from buffer.

@@ -13,6 +13,8 @@
 #define ROC_PIPELINE_PIPELINE_LOOP_H_
 
 #include "roc_audio/frame.h"
+#include "roc_audio/frame_factory.h"
+#include "roc_audio/iframe_reader.h"
 #include "roc_audio/sample_spec.h"
 #include "roc_core/atomic.h"
 #include "roc_core/mpsc_queue.h"
@@ -26,6 +28,7 @@
 #include "roc_pipeline/ipipeline_task_completer.h"
 #include "roc_pipeline/ipipeline_task_scheduler.h"
 #include "roc_pipeline/pipeline_task.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace pipeline {
@@ -51,7 +54,7 @@ struct PipelineLoopConfig {
     //! Set to zero to disable frame splitting.
     core::nanoseconds_t max_frame_length_between_tasks;
 
-    //! Mximum task processing duration happening immediatelly after processing a frame.
+    //! Maximum task processing duration happening immediately after processing a frame.
     //! If this period expires and there are still pending tasks, asynchronous
     //! task processing is scheduled.
     //! At least one task is always processed after each frame, even if this
@@ -61,7 +64,7 @@ struct PipelineLoopConfig {
     //! Time interval during which no task processing is allowed.
     //! This setting is used to prohibit task processing during the time when
     //! next read() or write() call is expected.
-    //! Since it can not be calculated abolutely precisely, and there is always
+    //! Since it can not be calculated absolutely precisely, and there is always
     //! thread switch overhead, scheduler jitter clock drift, we use a wide interval.
     core::nanoseconds_t task_processing_prohibited_interval;
 
@@ -138,7 +141,7 @@ struct PipelineLoopConfig {
 //! invocation by its own. Instead, it relies on the user-provided IPipelineTaskScheduler
 //! object.
 //!
-//! When the pipeline wants to schedule asychronous process_tasks() invocation, it
+//! When the pipeline wants to schedule asynchronous process_tasks() invocation, it
 //! calls IPipelineTaskScheduler::schedule_task_processing(). It's up to the user when and
 //! on which thread to invoke process_tasks(), but pipeline gives a hint with the ideal
 //! invocation time.
@@ -170,7 +173,7 @@ struct PipelineLoopConfig {
 //! When process_tasks() is processing asynchronous tasks, but detects that
 //! process_frame_and_tasks() was invoked concurrently from another thread, it gives
 //! it a way and exits. process_frame_and_tasks() will process the frame and some of
-//! the remaning tasks, and if there are even more tasks remaining, it will invoke
+//! the remaining tasks, and if there are even more tasks remaining, it will invoke
 //! schedule_task_processing() to allow process_tasks() to continue.
 //!
 //! When schedule() and process_tasks() want to invoke schedule_task_processing(), but
@@ -186,7 +189,7 @@ struct PipelineLoopConfig {
 //! process a frame or a task.
 //!
 //! scheduler_mutex_ protects IPipelineTaskScheduler invocations. It should be acquired to
-//! schedule or cancel asycnrhonous task processing.
+//! schedule or cancel asynchronous task processing.
 //!
 //! If pipeline_mutex_ is locked, it's guaranteed that the thread locking it will
 //! check pending tasks after unlocking the mutex and will either process them or
@@ -210,7 +213,7 @@ struct PipelineLoopConfig {
 //! seqlocks for 64-bit counters (which are reduced to atomics on 64-bit CPUs), always
 //! using try_lock() for mutexes and delaying the work if the mutex can't be acquired,
 //! and using semaphores instead of condition variables for signaling (which don't
-//! require blocking on mutex, at least on modern plarforms; e.g. on glibc they're
+//! require blocking on mutex, at least on modern platforms; e.g. on glibc they're
 //! implemented using an atomic and a futex).
 //!
 //! process_frame_and_tasks() is not lock-free because it has to acquire the pipeline
@@ -220,7 +223,7 @@ struct PipelineLoopConfig {
 //!
 //! This approach helps us with our global goal of making all inter-thread interactions
 //! mostly wait-free, so that one thread is never or almost never blocked when another
-//! thead is blocked, preempted, or busy.
+//! thread is blocked, preempted, or busy.
 //!
 //! Benchmarks
 //! ----------
@@ -246,6 +249,12 @@ public:
     void process_tasks();
 
 protected:
+    //! Pipeline direction.
+    enum Direction {
+        Dir_ReadFrames,  //!< Reading frames from pipeline.
+        Dir_WriteFrames, //!< Writing frames to pipeline.
+    };
+
     //! Task processing statistics.
     struct Stats {
         //! Total number of tasks processed.
@@ -279,7 +288,10 @@ protected:
     //! Initialization.
     PipelineLoop(IPipelineTaskScheduler& scheduler,
                  const PipelineLoopConfig& config,
-                 const audio::SampleSpec& sample_spec);
+                 const audio::SampleSpec& sample_spec,
+                 core::IPool& frame_pool,
+                 core::IPool& frame_buffer_pool,
+                 Direction direction);
 
     virtual ~PipelineLoop();
 
@@ -291,10 +303,13 @@ protected:
 
     //! Get task processing statistics.
     //! Returned object can't be accessed concurrently with other methods.
-    const Stats& get_stats_ref() const;
+    const Stats& stats_ref() const;
 
     //! Split frame and process subframes and some of the enqueued tasks.
-    bool process_subframes_and_tasks(audio::Frame& frame);
+    ROC_ATTR_NODISCARD status::StatusCode
+    process_subframes_and_tasks(audio::Frame& frame,
+                                packet::stream_timestamp_t frame_duration,
+                                audio::FrameReadMode mode);
 
     //! Get current time.
     virtual core::nanoseconds_t timestamp_imp() const = 0;
@@ -302,8 +317,11 @@ protected:
     //! Get current thread id.
     virtual uint64_t tid_imp() const = 0;
 
-    //! Process subframe.
-    virtual bool process_subframe_imp(audio::Frame& frame) = 0;
+    //! Read or write subframe.
+    virtual status::StatusCode
+    process_subframe_imp(audio::Frame& frame,
+                         packet::stream_timestamp_t frame_duration,
+                         audio::FrameReadMode frame_mode) = 0;
 
     //! Process task.
     virtual bool process_task_imp(PipelineTask& task) = 0;
@@ -311,8 +329,14 @@ protected:
 private:
     enum ProcState { ProcNotScheduled, ProcScheduled, ProcRunning };
 
-    bool process_subframes_and_tasks_simple_(audio::Frame& frame);
-    bool process_subframes_and_tasks_precise_(audio::Frame& frame);
+    status::StatusCode
+    process_subframes_and_tasks_simple_(audio::Frame& frame,
+                                        packet::stream_timestamp_t frame_duration,
+                                        audio::FrameReadMode frame_mode);
+    status::StatusCode
+    process_subframes_and_tasks_precise_(audio::Frame& frame,
+                                         packet::stream_timestamp_t frame_duration,
+                                         audio::FrameReadMode frame_mode);
 
     bool schedule_and_maybe_process_task_(PipelineTask& task);
     bool maybe_process_tasks_();
@@ -321,9 +345,16 @@ private:
     void cancel_async_task_processing_();
 
     void process_task_(PipelineTask& task, bool notify);
-    bool process_next_subframe_(audio::Frame& frame,
-                                packet::stream_timestamp_t* frame_pos,
-                                packet::stream_timestamp_t frame_duration);
+    status::StatusCode process_next_subframe_(audio::Frame& frame,
+                                              packet::stream_timestamp_t* frame_pos,
+                                              packet::stream_timestamp_t frame_duration,
+                                              audio::FrameReadMode frame_mode);
+    status::StatusCode
+    make_and_process_subframe_(audio::Frame& frame,
+                               packet::stream_timestamp_t frame_duration,
+                               packet::stream_timestamp_t subframe_pos,
+                               packet::stream_timestamp_t subframe_duration,
+                               audio::FrameReadMode subframe_mode);
 
     bool start_subframe_task_processing_();
     bool subframe_task_processing_allowed_(core::nanoseconds_t next_frame_deadline) const;
@@ -338,6 +369,7 @@ private:
 
     // configuration
     const PipelineLoopConfig config_;
+    const Direction direction_;
 
     const audio::SampleSpec sample_spec_;
 
@@ -345,6 +377,10 @@ private:
     const packet::stream_timestamp_t max_samples_between_tasks_;
 
     const core::nanoseconds_t no_task_proc_half_interval_;
+
+    // sub-frame allocation
+    audio::FrameFactory frame_factory_;
+    audio::FramePtr subframe_;
 
     // used to schedule asynchronous work
     IPipelineTaskScheduler& scheduler_;

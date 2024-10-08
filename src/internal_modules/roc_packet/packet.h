@@ -35,8 +35,8 @@ typedef core::SharedPtr<Packet> PacketPtr;
 
 //! Packet.
 class Packet : public core::RefCounted<Packet, core::PoolAllocation>,
-               public core::ListNode,
-               public core::MpscQueueNode {
+               public core::ListNode<>,
+               public core::MpscQueueNode<> {
 public:
     //! Constructor.
     explicit Packet(core::IPool& packet_pool);
@@ -58,7 +58,7 @@ public:
     //! Add flags.
     void add_flags(unsigned flags);
 
-    //! Check specific flag.
+    //! Check if packet has all of the given flags.
     bool has_flags(unsigned flags) const;
 
     //! Get flags.
@@ -96,7 +96,7 @@ public:
     //! Set packet buffer.
     void set_buffer(const core::Slice<uint8_t>& data);
 
-    //! Get protocol-dependant packet payload.
+    //! Get protocol-dependent packet payload.
     //! @remarks
     //!  Returns sub-slice with inner-most packet data.
     //!  E.g. for RTP nested into FECFRAME, returns payload
@@ -152,6 +152,10 @@ public:
     static Packet* container_of(UDP* udp) {
         return ROC_CONTAINER_OF(udp, Packet, udp_);
     }
+
+    //! Estimate number of bytes per packet for given number of samples.
+    //! This is only an approximation, don't rely on it.
+    static size_t approx_size(size_t n_samples);
 
 private:
     unsigned flags_;

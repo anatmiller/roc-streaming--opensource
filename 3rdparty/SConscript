@@ -15,20 +15,20 @@ vendored_dependencies = [
 # built using build-3rdparty.py script
 thirdparty_versions = {
     # libs
-    'alsa':             '1.0.29',
+    'alsa':             '1.1.9',
     'json-c':           '0.12-20140410',
     'libatomic_ops':    '7.6.10',
     'libunwind':        '1.2.1',
     'libuv':            '1.35.0',
     'ltdl':             '2.4.6',
-    'openfec':          '1.4.2.7',
+    'openfec':          '1.4.2.11',
     'openssl':          '3.0.8',
     'pulseaudio':       '12.2',
-    'sndfile':          '1.0.28',
+    'sndfile':          '1.0.26',
     'sox':              '14.4.2',
     'speexdsp':         '1.2.0',
 
-    # CLI tools
+    # cli tools
     'gengetopt':        '2.22.6',
     'ragel':            '6.10',
 
@@ -43,6 +43,10 @@ external_dependencies = set(thirdparty_versions.keys()) \
 
 # ragel is always needed
 external_dependencies.add('ragel')
+
+# ensures we don't build sndfile twice
+if 'pulseaudio' in external_dependencies:
+    external_dependencies.add('sndfile')
 
 # on Linux, PulseAudio needs ALSA
 if meta.platform in ['linux'] and 'pulseaudio' in external_dependencies:
@@ -187,11 +191,6 @@ elif 'openfec' in system_dependencies:
     if not conf.CheckDeclaration('OF_USE_DECODER', '#include <of_openfec_api.h>', 'c'):
         env.Die("openfec has no decoder support (OF_USE_DECODER)")
 
-    if not conf.CheckDeclaration('OF_USE_LDPC_STAIRCASE_CODEC',
-                                 '#include <of_openfec_api.h>', 'c'):
-        env.Die(
-            "openfec has no LDPC-Staircase codec support (OF_USE_LDPC_STAIRCASE_CODEC)")
-
     env = conf.Finish()
 
 # dep: openssl
@@ -200,14 +199,14 @@ if 'openssl' in autobuild_dependencies:
 
 elif 'openssl' in system_dependencies:
     ossl_prefix = None
-    # macOS: fallback to use a brew-installed openssl (via PKG_CONFIG_PATH)
+    # macOS: fallback to use a brew-installed openssl
     if meta.platform == 'darwin' and not is_crosscompiling:
         ossl_prefix = env.FindBrewPackage('openssl')
 
     conf = Configure(env, custom_tests=env.CustomTests)
 
     if not conf.AddPkgConfigDependency('libssl', '--cflags --libs', add_prefix=ossl_prefix):
-        conf.env.AddManualDependency(libs=['libssl'], prefix=ossl_prefix)
+        conf.env.AddManualDependency(libs=['ssl'], prefix=ossl_prefix)
 
     if not conf.CheckLibWithHeaderExt('ssl', 'openssl/rand.h', 'C', run=not is_crosscompiling):
         env.Die("OpenSSL not found (see 'config.log' for details)")
@@ -230,6 +229,31 @@ elif 'speexdsp' in system_dependencies:
 
     env = conf.Finish()
 
+# dep: sndfile
+if 'sndfile' in autobuild_dependencies:
+
+    env.BuildThirdParty(thirdparty_versions, 'sndfile')
+
+    conf = Configure(env, custom_tests=env.CustomTests)
+
+    env = conf.Finish()
+
+elif 'sndfile' in system_dependencies:
+    conf = Configure(env, custom_tests=env.CustomTests)
+
+    if not conf.AddPkgConfigDependency('sndfile', '--cflags --libs', exclude_from_pc=True):
+        conf.env.AddManualDependency(libs=['sndfile'], exclude_from_pc=True)
+
+    if not is_crosscompiling:
+        if not conf.CheckLibWithHeaderExt(
+                'sndfile', 'sndfile.h', 'C'):
+            env.Die("libsndfile >= 1.0.26 not found (see 'config.log' for details)")
+    else:
+        if not conf.CheckLibWithHeaderExt('sndfile', 'sndfile.h', 'C', run=False):
+            env.Die("libsndfile not found (see 'config.log' for details)")
+
+    env = conf.Finish()
+
 # dep: alsa
 if 'alsa' in autobuild_dependencies:
     env.BuildThirdParty(thirdparty_versions, 'alsa')
@@ -244,15 +268,16 @@ if 'pulseaudio' in autobuild_dependencies:
     pa_deps = [
         'ltdl',
         'json-c',
-        'sndfile',
         ]
 
     if 'alsa' in autobuild_dependencies:
         pa_deps += ['alsa']
 
+    if 'sndfile' in autobuild_dependencies:
+        pa_deps += ['sndfile']
+
     env.BuildThirdParty(thirdparty_versions, 'ltdl')
     env.BuildThirdParty(thirdparty_versions, 'json-c')
-    env.BuildThirdParty(thirdparty_versions, 'sndfile')
     env.BuildThirdParty(thirdparty_versions, 'pulseaudio',
                         deps=pa_deps, libs=['pulse', 'pulse-simple'])
 
@@ -371,7 +396,8 @@ if 'cpputest' in autobuild_dependencies:
 elif 'cpputest' in system_dependencies:
     conf = Configure(subenvs.tests, custom_tests=env.CustomTests)
 
-    if not conf.AddPkgConfigDependency('cpputest', '--cflags --libs'):
+    if not conf.AddPkgConfigDependency('cpputest', '--cflags --libs',
+                                       exclude_libs=['stdc++']):
         conf.env.AddManualDependency(libs=['CppUTest'])
 
     if not conf.CheckLibWithHeaderExt(

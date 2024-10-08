@@ -93,8 +93,8 @@ public:
     Reporter(const Config& config, IParticipant& participant, core::IArena& arena);
     ~Reporter();
 
-    //! Check if initialization succeeded.
-    bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Check if there is local sending stream.
     bool is_sending() const;
@@ -259,8 +259,8 @@ private:
     // that receives from us and/or sends to us.
     // Stream is uniquely identified by SSRC of remote participant.
     struct Stream : core::RefCounted<Stream, core::PoolAllocation>,
-                    core::HashmapNode,
-                    core::ListNode {
+                    core::HashmapNode<>,
+                    core::ListNode<> {
         Stream(core::IPool& pool,
                packet::stream_source_t source_id,
                core::nanoseconds_t report_time,
@@ -356,8 +356,8 @@ private:
     // If we're sending all reports to a single preconfigured address, there will be
     // only one instance. Otherwise there will be an instance for every unique address.
     struct Address : core::RefCounted<Address, core::PoolAllocation>,
-                     core::HashmapNode,
-                     core::ListNode {
+                     core::HashmapNode<>,
+                     core::ListNode<> {
         Address(core::IPool& pool,
                 core::IArena& arena,
                 const address::SocketAddr& remote_address,
@@ -422,7 +422,7 @@ private:
     // Interface implemented by local sender/receiver pipeline.
     IParticipant& participant_;
 
-    // Defines whether participant uses a single static destinatation address
+    // Defines whether participant uses a single static destination address
     // for all all reports, or otherwise sends individual reports to dynamically
     // discovered remote addresses.
     ParticipantReportMode participant_report_mode_;
@@ -451,8 +451,8 @@ private:
     core::SlabPool<Address, PreallocatedAddresses> address_pool_;
     core::Hashmap<Address, PreallocatedAddresses> address_map_;
 
-    // List of all addresss (from address map) ordered by rebuild time.
-    // Recently rebuilt addreses are moved to the front of the list.
+    // List of all addresses (from address map) ordered by rebuild time.
+    // Recently rebuilt addresses are moved to the front of the list.
     // This list always contains all existing addresses.
     core::List<Address, core::NoOwnership> address_lru_;
 
@@ -482,7 +482,7 @@ private:
     const Config config_;
     const core::nanoseconds_t max_delay_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace rtcp

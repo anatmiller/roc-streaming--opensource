@@ -11,6 +11,7 @@
 #include "roc_core/hashmap.h"
 #include "roc_core/hashsum.h"
 #include "roc_core/heap_arena.h"
+#include "roc_core/noop_arena.h"
 #include "roc_core/ref_counted.h"
 #include "roc_core/shared_ptr.h"
 #include "roc_core/string_builder.h"
@@ -20,17 +21,19 @@ namespace core {
 
 namespace {
 
-struct HeapAllocation {
-    template <class T> void destroy(T& object) {
-        delete &object;
+struct TestAllocation {
+    virtual ~TestAllocation() {
+    }
+
+    void dispose() {
+        delete this;
     }
 };
 
-class Object : public HashmapNode, public RefCounted<Object, HeapAllocation> {
+class Object : public HashmapNode<>, public RefCounted<Object, TestAllocation> {
 public:
     Object(const char* k) {
         strcpy(key_, k);
-        visited_ = false;
     }
 
     static hashsum_t key_hash(const char* key) {
@@ -45,17 +48,8 @@ public:
         return key_;
     }
 
-    bool is_visited() {
-        return visited_;
-    }
-
-    void set_visited() {
-        visited_ = true;
-    }
-
 private:
     char key_[64];
-    bool visited_;
 };
 
 void format_key(char* key, size_t keysz, size_t n) {
@@ -427,7 +421,7 @@ TEST(hashmap, iterate_modify) {
 }
 
 template <size_t Capacity> void test_embedded_capacity() {
-    Hashmap<Object, Capacity> hashmap;
+    Hashmap<Object, Capacity> hashmap(core::NoopArena);
 
     UNSIGNED_LONGS_EQUAL(0, hashmap.capacity());
 

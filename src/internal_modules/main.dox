@@ -14,9 +14,15 @@ namespace roc {
 }
 
 namespace roc {
-  //! @namespace roc::error
-  //! Error codes.
-  namepsace error {}
+  //! @namespace roc::stat
+  //! Statistical functions.
+  namepsace stat {}
+}
+
+namespace roc {
+  //! @namespace roc::status
+  //! Status codes.
+  namepsace status {}
 }
 
 namespace roc {
@@ -89,4 +95,10 @@ namespace roc {
   //! @namespace roc::sndio
   //! Sound I/O.
   namepsace sndio {}
+}
+
+namespace roc {
+  //! @namespace roc::sndio
+  //! Debugging I/O.
+  namepsace dbgio {}
 }

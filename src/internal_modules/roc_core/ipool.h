@@ -25,7 +25,11 @@ public:
     virtual ~IPool();
 
     //! Get size of the allocation per object.
+    //! Covers all internal overhead, if any.
     virtual size_t allocation_size() const = 0;
+
+    //! Get size of the object (without overhead).
+    virtual size_t object_size() const = 0;
 
     //! Reserve memory for given number of objects.
     //! @returns
@@ -42,7 +46,7 @@ public:
     virtual void deallocate(void* memory) = 0;
 
     //! Destroy object and deallocate its memory.
-    template <class T> void destroy_object(T& object) {
+    template <class T> void dispose_object(T& object) {
         object.~T();
         deallocate(&object);
     }
@@ -54,7 +58,8 @@ public:
 //! Placement new for core::IPool.
 //! @note
 //!  nothrow forces compiler to check for NULL return value before calling ctor.
-inline void* operator new(size_t, roc::core::IPool& pool) throw() {
+inline void* operator new(size_t size, roc::core::IPool& pool) throw() {
+    roc_panic_if(pool.object_size() < size);
     return pool.allocate();
 }
 

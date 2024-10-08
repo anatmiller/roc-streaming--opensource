@@ -10,9 +10,10 @@ scons -Q --enable-werror --build-3rdparty=all \
       --disable-libunwind \
       --disable-openfec \
       --disable-openssl \
-      --disable-speex \
+      --disable-speexdsp \
       --disable-sox \
-      --disable-pulseaudio
+      --disable-pulseaudio \
+      --disable-sndfile
 
 # optional dependencies: none, optional targets: all
 scons -Q --enable-werror --build-3rdparty=all \
@@ -23,9 +24,10 @@ scons -Q --enable-werror --build-3rdparty=all \
       --disable-libunwind \
       --disable-openfec \
       --disable-openssl \
-      --disable-speex \
+      --disable-speexdsp \
       --disable-sox \
       --disable-pulseaudio \
+      --disable-sndfile \
       test
 
 # optional dependencies: all, optional targets: all

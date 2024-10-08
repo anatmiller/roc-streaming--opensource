@@ -22,12 +22,15 @@ namespace rtcp {
 //!
 //! @remarks
 //!  Unlike other parsers, this one just records the buffer into RTCP part of the packet
-//!  and doesn't inspect the packet itself. The actual parsing is doing later in
-//!  rtcp::Session using rtcp::Traverser.
+//!  and doesn't inspect the packet itself. The actual parsing is done later in
+//!  rtcp::Communicator using rtcp::Traverser.
 class Parser : public packet::IParser, public core::NonCopyable<> {
 public:
     //! Initialization.
-    Parser();
+    explicit Parser(core::IArena& arena);
+
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Parse packet from buffer.
     virtual bool parse(packet::Packet& packet, const core::Slice<uint8_t>& buffer);

@@ -13,9 +13,16 @@
 namespace roc {
 namespace rtp {
 
-Parser::Parser(const EncodingMap& encoding_map, packet::IParser* inner_parser)
-    : encoding_map_(encoding_map)
+Parser::Parser(packet::IParser* inner_parser,
+               const EncodingMap& encoding_map,
+               core::IArena& arena)
+    : IParser(arena)
+    , encoding_map_(encoding_map)
     , inner_parser_(inner_parser) {
+}
+
+status::StatusCode Parser::init_status() const {
+    return status::StatusOK;
 }
 
 bool Parser::parse(packet::Packet& packet, const core::Slice<uint8_t>& buffer) {

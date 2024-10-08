@@ -107,8 +107,8 @@ inline size_t get_window_size(ResamplerProfile profile) {
 }
 
 inline size_t get_frame_size(size_t window_size,
-                             const audio::SampleSpec& in_spec,
-                             const audio::SampleSpec& out_spec) {
+                             const SampleSpec& in_spec,
+                             const SampleSpec& out_spec) {
     const float scaling =
         (float)in_spec.sample_rate() / (float)out_spec.sample_rate() * 1.5f;
 
@@ -117,11 +117,11 @@ inline size_t get_frame_size(size_t window_size,
 
 } // namespace
 
-BuiltinResampler::BuiltinResampler(core::IArena& arena,
-                                   core::BufferFactory<sample_t>& buffer_factory,
-                                   ResamplerProfile profile,
-                                   const audio::SampleSpec& in_spec,
-                                   const audio::SampleSpec& out_spec)
+BuiltinResampler::BuiltinResampler(const ResamplerConfig& config,
+                                   const SampleSpec& in_spec,
+                                   const SampleSpec& out_spec,
+                                   FrameFactory& frame_factory,
+                                   core::IArena& arena)
     : IResampler(arena)
     , in_spec_(in_spec)
     , out_spec_(out_spec)
@@ -130,9 +130,9 @@ BuiltinResampler::BuiltinResampler(core::IArena& arena,
     , curr_frame_(NULL)
     , next_frame_(NULL)
     , scaling_(1.0)
-    , window_size_(get_window_size(profile))
+    , window_size_(get_window_size(config.profile))
     , qt_half_sinc_window_size_(float_to_fixedpoint(window_size_))
-    , window_interp_(get_window_interp(profile))
+    , window_interp_(get_window_interp(config.profile))
     , window_interp_bits_(calc_bits(window_interp_))
     , frame_size_ch_(get_frame_size(window_size_, in_spec, out_spec))
     , frame_size_(frame_size_ch_ * in_spec.num_channels())
@@ -144,35 +144,53 @@ BuiltinResampler::BuiltinResampler(core::IArena& arena,
     , qt_sample_(float_to_fixedpoint(0))
     , qt_dt_(0)
     , cutoff_freq_(0.9f)
-    , valid_(false) {
+    , init_status_(status::NoStatus) {
+    if (!in_spec_.is_complete() || !out_spec_.is_complete() || !in_spec_.is_raw()
+        || !out_spec_.is_raw()) {
+        roc_panic("builtin resampler: required complete sample specs with raw format:"
+                  " in_spec=%s out_spec=%s",
+                  sample_spec_to_str(in_spec_).c_str(),
+                  sample_spec_to_str(out_spec_).c_str());
+    }
+
+    if (in_spec_.channel_set() != out_spec_.channel_set()) {
+        roc_panic("builtin resampler: required identical input and output channel sets:"
+                  " in_spec=%s out_spec=%s",
+                  sample_spec_to_str(in_spec_).c_str(),
+                  sample_spec_to_str(out_spec_).c_str());
+    }
+
     roc_log(
         LogDebug,
         "builtin resampler: initializing:"
         " profile=%s window_interp=%lu window_size=%lu frame_size=%lu channels_num=%lu",
-        resampler_profile_to_str(profile), (unsigned long)window_interp_,
+        resampler_profile_to_str(config.profile), (unsigned long)window_interp_,
         (unsigned long)window_size_, (unsigned long)frame_size_,
         (unsigned long)in_spec_.num_channels());
 
     if (!check_config_()) {
+        init_status_ = status::StatusBadConfig;
         return;
     }
 
     if (!fill_sinc_()) {
+        init_status_ = status::StatusNoMem;
         return;
     }
 
-    if (!alloc_frames_(buffer_factory)) {
+    if (!alloc_frames_(frame_factory)) {
+        init_status_ = status::StatusNoMem;
         return;
     }
 
-    valid_ = true;
+    init_status_ = status::StatusOK;
 }
 
 BuiltinResampler::~BuiltinResampler() {
 }
 
-bool BuiltinResampler::is_valid() const {
-    return valid_;
+status::StatusCode BuiltinResampler::init_status() const {
+    return init_status_;
 }
 
 bool BuiltinResampler::set_scaling(size_t input_sample_rate,
@@ -297,9 +315,9 @@ float BuiltinResampler::n_left_to_process() const {
     return fixedpoint_to_float(2 * qt_frame_size_ - qt_sample_) * in_spec_.num_channels();
 }
 
-bool BuiltinResampler::alloc_frames_(core::BufferFactory<sample_t>& buffer_factory) {
+bool BuiltinResampler::alloc_frames_(FrameFactory& frame_factory) {
     for (size_t n = 0; n < ROC_ARRAY_SIZE(frames_); n++) {
-        frames_[n] = buffer_factory.new_buffer();
+        frames_[n] = frame_factory.new_raw_buffer();
 
         if (!frames_[n]) {
             roc_log(LogError, "builtin resampler: can't allocate frame buffer");
@@ -313,25 +331,6 @@ bool BuiltinResampler::alloc_frames_(core::BufferFactory<sample_t>& buffer_facto
 }
 
 bool BuiltinResampler::check_config_() const {
-    if (!in_spec_.is_valid() || !out_spec_.is_valid() || !in_spec_.is_raw()
-        || !out_spec_.is_raw()) {
-        roc_log(LogError,
-                "builtin resampler: invalid sample spec:"
-                " in_spec=%s out_spec=%s",
-                sample_spec_to_str(in_spec_).c_str(),
-                sample_spec_to_str(out_spec_).c_str());
-        return false;
-    }
-
-    if (in_spec_.channel_set() != out_spec_.channel_set()) {
-        roc_log(LogError,
-                "builtin resampler: input and output channel sets should be equal:"
-                " in_spec=%s out_spec=%s",
-                sample_spec_to_str(in_spec_).c_str(),
-                sample_spec_to_str(out_spec_).c_str());
-        return false;
-    }
-
     if (frame_size_ != frame_size_ch_ * in_spec_.num_channels()) {
         roc_log(LogError,
                 "builtin resampler: frame_size is not multiple of num_channels:"
@@ -457,12 +456,12 @@ sample_t BuiltinResampler::resample_(const size_t channel_offset) {
     fixedpoint_t qt_sinc_cur =
         (fixedpoint_t)((qt_cur_ * (long_fixedpoint_t)qt_sinc_step_) >> FRACT_BIT_COUNT);
 
-    // sinc_table defined in positive half-plane, so at the begining of the window
+    // sinc_table defined in positive half-plane, so at the beginning of the window
     // qt_sinc_cur starts decreasing and after we cross 0 it will be increasing
     // till the end of the window.
     fixedpoint_t qt_sinc_inc = qt_sinc_step_;
 
-    // Compute fractional part of time position at the begining. It wont change during
+    // Compute fractional part of time position at the beginning. It wont change during
     // the run.
     float f_sinc_cur_fract = fractional(qt_sinc_cur << window_interp_bits_);
     sample_t accumulator = 0;

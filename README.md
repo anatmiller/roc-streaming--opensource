@@ -1,8 +1,8 @@
-![](docs/images/logo.png)
+![](docs/images/readme_logo.png)
 
 # Roc Toolkit: real-time audio streaming
 
-[![Build](https://github.com/roc-streaming/roc-toolkit/workflows/build/badge.svg?branch=master)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml?query=branch%3Amaster) [![GitHub release](https://img.shields.io/github/release/roc-streaming/roc-toolkit.svg)](https://github.com/roc-streaming/roc-toolkit/releases) [![Matrix chat](https://matrix.to/img/matrix-badge.svg)](https://app.element.io/#/room/#roc-streaming:matrix.org)
+[![build](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml) [![release](https://img.shields.io/github/release/roc-streaming/roc-toolkit.svg)](https://github.com/roc-streaming/roc-toolkit/releases) [![matrix](https://matrix.to/img/matrix-badge.svg)](https://app.element.io/#/room/#roc-streaming:matrix.org)
 
 Roc is a toolkit for real-time audio streaming over the network.
 
@@ -46,8 +46,8 @@ See details on continuous integration [here](https://roc-streaming.org/toolkit/d
 
 Branch    | Status
 --------- | ------
-`master`  | [![](https://github.com/roc-streaming/roc-toolkit/workflows/build/badge.svg?branch=master)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml?query=branch%3Amaster)
-`develop` | [![](https://github.com/roc-streaming/roc-toolkit/workflows/build/badge.svg?branch=develop)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml?query=branch%3Adevelop)
+`master`  | [![build](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml?query=branch%3Amaster)
+`develop` | [![build](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/roc-streaming/roc-toolkit/actions/workflows/build.yml?query=branch%3Adevelop)
 
 Versioning
 ----------
@@ -73,27 +73,29 @@ Plans
 
 See here:
 
-* [Project board](https://github.com/roc-streaming/roc-toolkit/projects/2)
+* [Project board](https://github.com/orgs/roc-streaming/projects/5)
 * [Roadmap](https://roc-streaming.org/toolkit/docs/development/roadmap.html)
+
+Donations
+---------
+
+If you would like to support the project financially, please refer to [this page](https://roc-streaming.org/toolkit/docs/about_project/sponsors.html). This project is developed by volunteers in their free time, and your donations will help to spend more time on the project and keep it growing.
+
+Thank you!
+
+<a href="https://liberapay.com/roc-streaming"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a>
 
 Community
 ---------
 
-We have a mailing list and an Matrix chat room. See details [here](https://roc-streaming.org/toolkit/docs/about_project/contacts.html).
+We have a forum, mailing list, and Matrix chat room. See details [here](https://roc-streaming.org/toolkit/docs/about_project/contacts.html).
 
 Contributing
 ------------
 
-Contributions in any form are always welcome! See [contribution guidelines](https://roc-streaming.org/toolkit/docs/development/contribution_guidelines.html).
+Contributions in any form are always welcome! Please check out [contribution guidelines](https://roc-streaming.org/toolkit/docs/development/contribution_guidelines.html).
 
 Tasks needing help are [listed here](https://github.com/roc-streaming/roc-toolkit/labels/help%20wanted).
-
-Donating
---------
-
-If you would like to support the project financially, see details on [this page](https://roc-streaming.org/toolkit/docs/about_project/sponsors.html).
-
-Thank you!
 
 Licensing
 ---------

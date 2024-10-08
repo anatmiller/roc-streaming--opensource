@@ -13,8 +13,7 @@
 
 #include "test_helpers/utils.h"
 
-#include "roc_audio/latency_tuner.h"
-#include "roc_core/buffer_factory.h"
+#include "roc_audio/latency_config.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/time.h"
 #include "roc_packet/ilink_meter.h"
@@ -35,12 +34,10 @@ class ControlWriter : public core::NonCopyable<> {
 public:
     ControlWriter(packet::IWriter& writer,
                   packet::PacketFactory& packet_factory,
-                  core::BufferFactory<uint8_t>& buffer_factory,
                   const address::SocketAddr& src_addr,
                   const address::SocketAddr& dst_addr)
         : writer_(writer)
         , packet_factory_(packet_factory)
-        , buffer_factory_(buffer_factory)
         , src_addr_(src_addr)
         , dst_addr_(dst_addr)
         , local_source_(0)
@@ -50,7 +47,7 @@ public:
 
     void write_sender_report(packet::ntp_timestamp_t ntp_ts,
                              packet::stream_timestamp_t rtp_ts) {
-        core::Slice<uint8_t> buff = buffer_factory_.new_buffer();
+        core::Slice<uint8_t> buff = packet_factory_.new_packet_buffer();
         CHECK(buff);
 
         buff.reslice(0, 0);
@@ -85,7 +82,7 @@ public:
 
     void write_receiver_report(packet::ntp_timestamp_t ntp_ts,
                                const audio::SampleSpec& sample_spec) {
-        core::Slice<uint8_t> buff = buffer_factory_.new_buffer();
+        core::Slice<uint8_t> buff = packet_factory_.new_packet_buffer();
         CHECK(buff);
 
         buff.reslice(0, 0);
@@ -100,7 +97,7 @@ public:
         rr_blk.set_ssrc(remote_source_);
         rr_blk.set_cum_loss(link_metrics_.lost_packets);
         rr_blk.set_last_seqnum(link_metrics_.ext_last_seqnum);
-        rr_blk.set_jitter(sample_spec.ns_2_stream_timestamp(link_metrics_.jitter));
+        rr_blk.set_jitter(sample_spec.ns_2_stream_timestamp(link_metrics_.peak_jitter));
         rr_blk.set_last_sr(ntp_ts);
         rr_blk.set_delay_last_sr(0);
 
@@ -196,7 +193,6 @@ private:
     packet::IWriter& writer_;
 
     packet::PacketFactory& packet_factory_;
-    core::BufferFactory<uint8_t>& buffer_factory_;
 
     address::SocketAddr src_addr_;
     address::SocketAddr dst_addr_;

@@ -30,8 +30,9 @@ TEST_GROUP(sender_encoder) {
         CHECK(context);
 
         memset(&sender_config, 0, sizeof(sender_config));
+        sender_config.frame_encoding.format = ROC_FORMAT_PCM;
+        sender_config.frame_encoding.subformat = ROC_SUBFORMAT_PCM_FLOAT32;
         sender_config.frame_encoding.rate = 44100;
-        sender_config.frame_encoding.format = ROC_FORMAT_PCM_FLOAT32;
         sender_config.frame_encoding.channels = ROC_CHANNEL_LAYOUT_STEREO;
         sender_config.packet_encoding = ROC_PACKET_ENCODING_AVP_L16_STEREO;
         sender_config.fec_encoding = ROC_FEC_ENCODING_DISABLE;
@@ -110,24 +111,14 @@ TEST(sender_encoder, bad_args) {
 
         roc_sender_metrics send_metrics;
         roc_connection_metrics conn_metrics;
-        size_t conn_metrics_count = 1;
 
         // bad
-        CHECK(roc_sender_encoder_query(NULL, &send_metrics, &conn_metrics,
-                                       &conn_metrics_count)
-              == -1);
-        CHECK(roc_sender_encoder_query(encoder, &send_metrics, &conn_metrics, NULL)
-              == -1);
+        CHECK(roc_sender_encoder_query(NULL, &send_metrics, &conn_metrics) == -1);
+        CHECK(roc_sender_encoder_query(encoder, NULL, &conn_metrics) == -1);
+        CHECK(roc_sender_encoder_query(encoder, &send_metrics, NULL) == -1);
 
         // good
-        CHECK(roc_sender_encoder_query(encoder, &send_metrics, NULL, NULL) == 0);
-        CHECK(roc_sender_encoder_query(encoder, NULL, &conn_metrics, &conn_metrics_count)
-              == 0);
-        CHECK(roc_sender_encoder_query(encoder, &send_metrics, NULL, &conn_metrics_count)
-              == 0);
-        CHECK(roc_sender_encoder_query(encoder, &send_metrics, &conn_metrics,
-                                       &conn_metrics_count)
-              == 0);
+        CHECK(roc_sender_encoder_query(encoder, &send_metrics, &conn_metrics) == 0);
 
         LONGS_EQUAL(0, roc_sender_encoder_close(encoder));
     }

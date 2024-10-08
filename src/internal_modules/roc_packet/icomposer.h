@@ -14,14 +14,25 @@
 
 #include "roc_core/slice.h"
 #include "roc_packet/packet.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace packet {
 
 //! Packet composer interface.
-class IComposer {
+class IComposer : public core::ArenaAllocation {
 public:
+    //! Initialize.
+    explicit IComposer(core::IArena& arena);
+
+    //! Deinitialize.
     virtual ~IComposer();
+
+    //! Check if the object was successfully constructed.
+    //! @returns
+    //!  status::StatusOK if composer was initialized correctly,
+    //!  or error code otherwise.
+    virtual status::StatusCode init_status() const = 0;
 
     //! Adjust buffer to align payload.
     //! @remarks
@@ -38,7 +49,7 @@ public:
     //! @remarks
     //!  Resizes the given @p buffer so that it can fit the @p packet headers and
     //!  payload. If the packet payload contains an inner packet, calls the inner
-    //!  composer as well The @p payload_size referes to the payload of the most
+    //!  composer as well The @p payload_size refers to the payload of the most
     //!  inner packet. Modifies the @p packet so that its payload fields point to
     //!  the appropriate parts of the @p buffer.
     //! @returns
@@ -62,7 +73,7 @@ public:
     //!  Formats @p packet headers and payloads to the buffer attached to it during
     //!  a previous prepare() call.
     //! @returns
-    //!  true if the packet was successfully composed or false if an error occured.
+    //!  true if the packet was successfully composed or false if an error occurred.
     virtual bool compose(Packet& packet) = 0;
 };
 

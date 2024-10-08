@@ -48,22 +48,25 @@ rocstreaming/env-alpine             alpine:latest         x86_64        distro d
 Linux toolchains
 ----------------
 
-============================================================== ============= ==========================
-Image                                                          Architecture  Compilers
-============================================================== ============= ==========================
-rocstreaming/toolchain-aarch64-linux-gnu:gcc-7.4               armv8-a       gcc-7.4, gcc-10.3
-rocstreaming/toolchain-arm-linux-gnueabihf:gcc-4.9             armv7-a       gcc-4.9, gcc-7.4, gcc-10.3
-rocstreaming/toolchain-arm-bcm2708hardfp-linux-gnueabi:gcc-4.7 armv6         gcc-4.7
-============================================================== ============= ==========================
+============================================================== ============= ====== ==========================
+Image                                                          Architecture  Libc   Compilers
+============================================================== ============= ====== ==========================
+rocstreaming/toolchain-aarch64-linux-gnu:gcc-7.4               armv8-a       glibc  gcc-7.4, gcc-10.3
+rocstreaming/toolchain-arm-linux-gnueabihf:gcc-4.9             armv7-a       glibc  gcc-4.9, gcc-7.4, gcc-10.3
+rocstreaming/toolchain-arm-bcm2708hardfp-linux-gnueabi:gcc-4.7 armv6         glibc  gcc-4.7
+rocstreaming/toolchain-mips-openwrt-linux-atheros:17.01        mips32 24Kc   musl   gcc-5.4
+rocstreaming/toolchain-mips-openwrt-linux-atheros:12.09        mips32 24Kc   uClibc gcc-4.6
+============================================================== ============= ====== ==========================
 
 Android toolchains
 ------------------
 
-========================================== =========== =================================== =============
+========================================== =========== =================================== =========
 Image                                      APIs        ABIs                                Compilers
-========================================== =========== =================================== =============
-rocstreaming/toolchain-linux-android:ndk21 21-29       armeabi-v7a, arm64-v8a, x86, x86_64 clang-9.0.8
-========================================== =========== =================================== =============
+========================================== =========== =================================== =========
+rocstreaming/toolchain-linux-android:ndk26 21-34       armeabi-v7a, arm64-v8a, x86, x86_64 clang-17
+rocstreaming/toolchain-linux-android:ndk21 21-29       armeabi-v7a, arm64-v8a, x86, x86_64 clang-9
+========================================== =========== =================================== =========
 
 Full Android environment
 ------------------------

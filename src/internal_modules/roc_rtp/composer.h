@@ -14,6 +14,7 @@
 
 #include "roc_core/noncopyable.h"
 #include "roc_packet/icomposer.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace rtp {
@@ -24,7 +25,10 @@ public:
     //! Initialization.
     //! @remarks
     //!  If @p inner_composer is not NULL, it is used to compose the packet payload.
-    Composer(packet::IComposer* inner_composer);
+    Composer(packet::IComposer* inner_composer, core::IArena& arena);
+
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Adjust buffer to align payload.
     virtual bool

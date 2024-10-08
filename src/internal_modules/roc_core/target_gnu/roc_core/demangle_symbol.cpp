@@ -6,11 +6,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include "roc_core/backtrace.h"
+
 #include <cxxabi.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "roc_core/backtrace.h"
 
 namespace roc {
 namespace core {
@@ -37,7 +37,7 @@ demangle_symbol(const char* mangled, char*& demangled_buf, size_t& demangled_siz
     }
 
     // __cxa_demangle() will realloc() demangled_buf if it is too small and
-    // update demangled_size accrodingly
+    // update demangled_size accordingly
     int status = -1;
     char* new_buf = abi::__cxa_demangle(mangled, demangled_buf, &demangled_size, &status);
 

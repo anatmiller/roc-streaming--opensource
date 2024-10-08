@@ -101,17 +101,29 @@ public:
     //!  range are enabled in channel set, the method will succeed.
     bool is_superset(ChannelMask mask) const;
 
-    //! Set given channel to be enabled or disabled.
-    void set_channel(size_t n, bool enabled);
-
-    //! Set all channels in inclusive range to be enabled or disabled.
-    void set_channel_range(size_t from, size_t to, bool enabled);
-
-    //! Set enabled channels based on given mask.
+    //! Set channel mask to given bitmask.
     //! @remarks
-    //!  The mask defines only first 32 channels. All channels outside of 0-31
-    //!  range will be disabled.
-    void set_channel_mask(ChannelMask mask);
+    //!  The mask defines only first 32 channels.
+    //!  All channels outside of the 0-31 range are disabled.
+    void set_mask(ChannelMask mask);
+
+    //! Set channel mask to all channels from inclusive range.
+    //! @remarks
+    //!  All channels within range and enabled.
+    //!  All other channels are disabled.
+    void set_range(size_t from, size_t to);
+
+    //! Set channel mask based on channel count.
+    //! @remarks
+    //!  Tries to find a mask that looks most appropriate for given channel count.
+    //!  Falls back to just enabling first N channels and disabling others.
+    void set_count(size_t count);
+
+    //! Enable/disable given channel.
+    void toggle_channel(size_t n, bool enabled);
+
+    //! Enable/disable all channels in inclusive range.
+    void toggle_channel_range(size_t from, size_t to, bool enabled);
 
     //! Set channel set to result of bitwise AND operation with another set.
     //! @remarks
@@ -144,7 +156,8 @@ private:
         NumWords = MaxChannels / WordBits
     };
 
-    void update_();
+    void clear_chans_();
+    void index_chans_();
 
     word_t words_[NumWords];
 

@@ -12,8 +12,8 @@
 #ifndef ROC_PIPELINE_SENDER_LOOP_H_
 #define ROC_PIPELINE_SENDER_LOOP_H_
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
+#include "roc_core/ipool.h"
 #include "roc_core/mutex.h"
 #include "roc_core/ticker.h"
 #include "roc_pipeline/config.h"
@@ -56,6 +56,7 @@ public:
         bool (SenderLoop::*func_)(Task&); //!< Task implementation method.
 
         SenderSlot* slot_;                        //!< Slot.
+        SenderSlotConfig slot_config_;            //!< Slot config.
         address::Interface iface_;                //!< Interface.
         address::Protocol proto_;                 //!< Protocol.
         address::SocketAddr outbound_address_;    //!< Destination address.
@@ -73,7 +74,7 @@ public:
         class CreateSlot : public Task {
         public:
             //! Set task parameters.
-            CreateSlot();
+            CreateSlot(const SenderSlotConfig& slot_config);
 
             //! Get created slot handle.
             SlotHandle get_handle() const;
@@ -120,15 +121,18 @@ public:
 
     //! Initialize.
     SenderLoop(IPipelineTaskScheduler& scheduler,
-               const SenderConfig& config,
-               const rtp::EncodingMap& encoding_map,
-               packet::PacketFactory& packet_factory,
-               core::BufferFactory<uint8_t>& byte_buffer_factory,
-               core::BufferFactory<audio::sample_t>& sample_buffer_factory,
+               const SenderSinkConfig& sink_config,
+               audio::ProcessorMap& processor_map,
+               rtp::EncodingMap& encoding_map,
+               core::IPool& packet_pool,
+               core::IPool& packet_buffer_pool,
+               core::IPool& frame_pool,
+               core::IPool& frame_buffer_pool,
                core::IArena& arena);
+    ~SenderLoop();
 
     //! Check if the pipeline was successfully constructed.
-    bool is_valid() const;
+    status::StatusCode init_status() const;
 
     //! Get sender sink.
     //! @remarks
@@ -137,23 +141,29 @@ public:
 
 private:
     // Methods of sndio::ISink
+    virtual sndio::DeviceType type() const;
     virtual sndio::ISink* to_sink();
     virtual sndio::ISource* to_source();
-    virtual sndio::DeviceType type() const;
-    virtual sndio::DeviceState state() const;
-    virtual void pause();
-    virtual bool resume();
-    virtual bool restart();
     virtual audio::SampleSpec sample_spec() const;
-    virtual core::nanoseconds_t latency() const;
+    virtual core::nanoseconds_t frame_length() const;
+    virtual bool has_state() const;
+    virtual sndio::DeviceState state() const;
+    virtual status::StatusCode pause();
+    virtual status::StatusCode resume();
     virtual bool has_latency() const;
+    virtual core::nanoseconds_t latency() const;
     virtual bool has_clock() const;
-    virtual void write(audio::Frame& frame);
+    virtual status::StatusCode write(audio::Frame& frame);
+    virtual ROC_ATTR_NODISCARD status::StatusCode flush();
+    virtual status::StatusCode close();
+    virtual void dispose();
 
     // Methods of PipelineLoop
     virtual core::nanoseconds_t timestamp_imp() const;
     virtual uint64_t tid_imp() const;
-    virtual bool process_subframe_imp(audio::Frame&);
+    virtual status::StatusCode process_subframe_imp(audio::Frame& frame,
+                                                    packet::stream_timestamp_t duration,
+                                                    audio::FrameReadMode mode);
     virtual bool process_task_imp(PipelineTask&);
 
     // Methods for tasks
@@ -168,12 +178,11 @@ private:
     core::Optional<core::Ticker> ticker_;
     core::Ticker::ticks_t ticker_ts_;
 
-    const bool auto_duration_;
     const bool auto_cts_;
 
     const audio::SampleSpec sample_spec_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace pipeline

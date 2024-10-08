@@ -6,14 +6,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include "roc_core/backtrace.h"
+#include "roc_core/console.h"
+
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unwind.h>
-
-#include "roc_core/backtrace.h"
-#include "roc_core/console.h"
 
 namespace roc {
 namespace core {
@@ -51,11 +51,11 @@ ssize_t capture_backtrace(void** buffer, size_t max) {
 
 void dump_backtrace(void** buffer, ssize_t count) {
     if (count <= 0) {
-        Console::instance().println("No backtrace available\n");
+        console_println("No backtrace available\n");
         return;
     }
 
-    Console::instance().println("Backtrace:\n");
+    console_println("Backtrace:\n");
 
     char* demangled_buf = NULL;
     size_t demangled_size = 0;
@@ -72,8 +72,8 @@ void dump_backtrace(void** buffer, ssize_t count) {
             demangled_symbol = demangle_symbol(symbol, demangled_buf, demangled_size);
         }
 
-        Console::instance().println("#%d: %p %s", (int)idx, addr,
-                                    demangled_symbol ? demangled_symbol : symbol);
+        console_println("#%d: %p %s", (int)idx, addr,
+                        demangled_symbol ? demangled_symbol : symbol);
     }
 
     free(demangled_buf);

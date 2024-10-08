@@ -51,8 +51,8 @@ public:
                    packet::IWriter& outbound_writer,
                    core::IArena& arena);
 
-    //! Check if pipeline was succefully constructed.
-    bool is_valid() const;
+    //! Check if the pipeline was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Get protocol.
     address::Protocol proto() const;
@@ -96,6 +96,9 @@ public:
 private:
     virtual ROC_ATTR_NODISCARD status::StatusCode write(const packet::PacketPtr& packet);
 
+    status::StatusCode handle_packet_(const packet::PacketPtr& packet,
+                                      core::nanoseconds_t current_time);
+
     const address::Protocol proto_;
 
     StateTracker& state_tracker_;
@@ -115,7 +118,7 @@ private:
     core::Optional<rtcp::Parser> rtcp_parser_;
     core::MpscQueue<packet::Packet> inbound_queue_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace pipeline

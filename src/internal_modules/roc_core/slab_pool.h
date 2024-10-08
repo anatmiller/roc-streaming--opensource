@@ -23,14 +23,21 @@
 namespace roc {
 namespace core {
 
-//! Memory pool flags.
-enum SlabPoolFlags {
-    //! Enable guards for buffer overflow, invalid ownership, etc.
-    SlabPoolFlag_EnableGuards = (1 << 0),
+//! Memory pool guards.
+enum SlabPoolGuard {
+    //! Panic if leaks detected in pool destructor.
+    SlabPool_LeakGuard = (1 << 0),
+    //! Panic if detected buffer overflow when deallocating object.
+    SlabPool_OverflowGuard = (1 << 1),
+    //! Panic if detected ownership mismatch when deallocating object.
+    SlabPool_OwnershipGuard = (1 << 2),
 };
 
-//! Default memory pool flags.
-enum { DefaultSlabPoolFlags = (SlabPoolFlag_EnableGuards) };
+//! Default memory pool guards.
+enum {
+    SlabPool_DefaultGuards =
+        (SlabPool_LeakGuard | SlabPool_OverflowGuard | SlabPool_OwnershipGuard)
+};
 
 //! Memory pool.
 //!
@@ -72,13 +79,13 @@ public:
     //!  - @p object_size defines size of single object in bytes
     //!  - @p min_alloc_bytes defines minimum size in bytes per request to arena
     //!  - @p max_alloc_bytes defines maximum size in bytes per request to arena
-    //!  - @p flags defines options to modify behaviour as indicated in SlabPoolFlags
-    explicit SlabPool(const char* name,
-                      IArena& arena,
-                      size_t object_size = sizeof(T),
-                      size_t min_alloc_bytes = 0,
-                      size_t max_alloc_bytes = 0,
-                      size_t flags = DefaultSlabPoolFlags)
+    //!  - @p guards defines options to modify behaviour as indicated in SlabPoolGuard
+    SlabPool(const char* name,
+             IArena& arena,
+             size_t object_size = sizeof(T),
+             size_t min_alloc_bytes = 0,
+             size_t max_alloc_bytes = 0,
+             size_t guards = SlabPool_DefaultGuards)
         : impl_(name,
                 arena,
                 object_size,
@@ -86,26 +93,31 @@ public:
                 max_alloc_bytes,
                 embedded_data_.memory(),
                 embedded_data_.size(),
-                flags) {
+                guards) {
     }
 
     //! Get size of the allocation per object.
-    size_t allocation_size() const {
+    virtual size_t allocation_size() const {
         return impl_.allocation_size();
     }
 
+    //! Get size of the object.
+    virtual size_t object_size() const {
+        return impl_.object_size();
+    }
+
     //! Reserve memory for given number of objects.
-    ROC_ATTR_NODISCARD bool reserve(size_t n_objects) {
+    virtual ROC_ATTR_NODISCARD bool reserve(size_t n_objects) {
         return impl_.reserve(n_objects);
     }
 
     //! Allocate memory for an object.
-    void* allocate() {
+    virtual void* allocate() {
         return impl_.allocate();
     }
 
     //! Return memory to pool.
-    void deallocate(void* memory) {
+    virtual void deallocate(void* memory) {
         impl_.deallocate(memory);
     }
 

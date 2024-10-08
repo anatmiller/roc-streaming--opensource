@@ -8,7 +8,6 @@
 
 #include <CppUTest/TestHarness.h>
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/heap_arena.h"
 #include "roc_fec/composer.h"
 #include "roc_fec/parser.h"
@@ -81,6 +80,11 @@ const uint8_t Ref_rs8m_repair[] = {
     0x09, 0x0a
 };
 
+enum { BufferSize = 1000 };
+
+core::HeapArena arena;
+packet::PacketFactory packet_factory(arena, BufferSize);
+
 struct PacketTest {
     packet::IComposer* composer;
     packet::IParser* parser;
@@ -93,10 +97,6 @@ struct PacketTest {
     const uint8_t* reference;
     size_t reference_size;
 };
-
-core::HeapArena arena;
-core::BufferFactory<uint8_t> buffer_factory(arena, 1000);
-packet::PacketFactory packet_factory(arena);
 
 void fill_packet(packet::Packet& packet, bool is_rtp) {
     if (is_rtp) {
@@ -163,7 +163,7 @@ void check_packet(packet::Packet& packet,
 }
 
 void test_compose(const PacketTest& test) {
-    core::Slice<uint8_t> buffer = buffer_factory.new_buffer();
+    core::Slice<uint8_t> buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
 
     packet::PacketPtr packet = packet_factory.new_packet();
@@ -184,7 +184,7 @@ void test_compose(const PacketTest& test) {
 }
 
 void test_parse(const PacketTest& test) {
-    core::Slice<uint8_t> buffer = buffer_factory.new_buffer();
+    core::Slice<uint8_t> buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
 
     buffer.reslice(0, test.reference_size);
@@ -203,7 +203,7 @@ void test_parse(const PacketTest& test) {
 }
 
 void test_compose_parse(const PacketTest& test) {
-    core::Slice<uint8_t> buffer = buffer_factory.new_buffer();
+    core::Slice<uint8_t> buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
 
     packet::PacketPtr packet1 = packet_factory.new_packet();
@@ -236,12 +236,12 @@ void test_all(const PacketTest& test) {
 TEST_GROUP(composer_parser) {};
 
 TEST(composer_parser, rtp_ldpc_source) {
-    rtp::Composer rtp_composer(NULL);
-    Composer<LDPC_Source_PayloadID, Source, Footer> ldpc_composer(&rtp_composer);
+    rtp::Composer rtp_composer(NULL, arena);
+    Composer<LDPC_Source_PayloadID, Source, Footer> ldpc_composer(&rtp_composer, arena);
 
     rtp::EncodingMap rtp_encoding_map(arena);
-    rtp::Parser rtp_parser(rtp_encoding_map, NULL);
-    Parser<LDPC_Source_PayloadID, Source, Footer> ldpc_parser(&rtp_parser);
+    rtp::Parser rtp_parser(NULL, rtp_encoding_map, arena);
+    Parser<LDPC_Source_PayloadID, Source, Footer> ldpc_parser(&rtp_parser, arena);
 
     PacketTest test;
     test.composer = &ldpc_composer;
@@ -256,8 +256,8 @@ TEST(composer_parser, rtp_ldpc_source) {
 }
 
 TEST(composer_parser, ldpc_repair) {
-    Composer<LDPC_Repair_PayloadID, Repair, Header> ldpc_composer(NULL);
-    Parser<LDPC_Repair_PayloadID, Repair, Header> ldpc_parser(NULL);
+    Composer<LDPC_Repair_PayloadID, Repair, Header> ldpc_composer(NULL, arena);
+    Parser<LDPC_Repair_PayloadID, Repair, Header> ldpc_parser(NULL, arena);
 
     PacketTest test;
     test.composer = &ldpc_composer;
@@ -272,12 +272,12 @@ TEST(composer_parser, ldpc_repair) {
 }
 
 TEST(composer_parser, rtp_rs8m_source) {
-    rtp::Composer rtp_composer(NULL);
-    Composer<RS8M_PayloadID, Source, Footer> rs8m_composer(&rtp_composer);
+    rtp::Composer rtp_composer(NULL, arena);
+    Composer<RS8M_PayloadID, Source, Footer> rs8m_composer(&rtp_composer, arena);
 
     rtp::EncodingMap rtp_encoding_map(arena);
-    rtp::Parser rtp_parser(rtp_encoding_map, NULL);
-    Parser<RS8M_PayloadID, Source, Footer> rs8m_parser(&rtp_parser);
+    rtp::Parser rtp_parser(NULL, rtp_encoding_map, arena);
+    Parser<RS8M_PayloadID, Source, Footer> rs8m_parser(&rtp_parser, arena);
 
     PacketTest test;
     test.composer = &rs8m_composer;
@@ -292,8 +292,8 @@ TEST(composer_parser, rtp_rs8m_source) {
 }
 
 TEST(composer_parser, rs8m_repair) {
-    Composer<RS8M_PayloadID, Repair, Header> rs8m_composer(NULL);
-    Parser<RS8M_PayloadID, Repair, Header> rs8m_parser(NULL);
+    Composer<RS8M_PayloadID, Repair, Header> rs8m_composer(NULL, arena);
+    Parser<RS8M_PayloadID, Repair, Header> rs8m_parser(NULL, arena);
 
     PacketTest test;
     test.composer = &rs8m_composer;

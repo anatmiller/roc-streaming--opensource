@@ -13,11 +13,11 @@
 #define ROC_AUDIO_DECIMATION_RESAMPLER_H_
 
 #include "roc_audio/frame.h"
+#include "roc_audio/frame_factory.h"
 #include "roc_audio/iframe_reader.h"
 #include "roc_audio/iresampler.h"
 #include "roc_audio/sample.h"
 #include "roc_audio/sample_spec.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/rate_limiter.h"
 #include "roc_core/slice.h"
@@ -51,15 +51,15 @@ class DecimationResampler : public IResampler, public core::NonCopyable<> {
 public:
     //! Initialize.
     DecimationResampler(const core::SharedPtr<IResampler>& inner_resampler,
-                        core::IArena& arena,
-                        core::BufferFactory<sample_t>& buffer_factory,
-                        const audio::SampleSpec& in_spec,
-                        const audio::SampleSpec& out_spec);
+                        const SampleSpec& in_spec,
+                        const SampleSpec& out_spec,
+                        FrameFactory& frame_factory,
+                        core::IArena& arena);
 
     ~DecimationResampler();
 
-    //! Check if object is successfully constructed.
-    virtual bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Set new resample factor.
     virtual bool set_scaling(size_t input_rate, size_t output_rate, float multiplier);
@@ -82,8 +82,8 @@ private:
     const core::SharedPtr<IResampler> inner_resampler_;
     bool use_inner_resampler_;
 
-    audio::SampleSpec input_spec_;
-    audio::SampleSpec output_spec_;
+    SampleSpec input_spec_;
+    SampleSpec output_spec_;
     float multiplier_;
 
     const size_t num_ch_;
@@ -100,7 +100,7 @@ private:
     size_t decim_count_;
     core::RateLimiter report_limiter_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace audio

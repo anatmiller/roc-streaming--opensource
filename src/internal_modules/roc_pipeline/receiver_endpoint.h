@@ -40,20 +40,20 @@ class ReceiverSessionGroup;
 //!  - a pipeline for processing packets from single network endpoint
 //!  - a reference to session group to which packets are routed
 class ReceiverEndpoint : public core::RefCounted<ReceiverEndpoint, core::ArenaAllocation>,
-                         public core::ListNode,
+                         public core::ListNode<>,
                          private packet::IWriter {
 public:
     //! Initialize.
     ReceiverEndpoint(address::Protocol proto,
                      StateTracker& state_tracker,
                      ReceiverSessionGroup& session_group,
-                     const rtp::EncodingMap& encoding_map,
+                     rtp::EncodingMap& encoding_map,
                      const address::SocketAddr& inbound_address,
                      packet::IWriter* outbound_writer,
                      core::IArena& arena);
 
-    //! Check if the port pipeline was succefully constructed.
-    bool is_valid() const;
+    //! Check if the pipeline was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Get protocol.
     address::Protocol proto() const;
@@ -98,6 +98,9 @@ public:
 private:
     virtual ROC_ATTR_NODISCARD status::StatusCode write(const packet::PacketPtr& packet);
 
+    status::StatusCode handle_packet_(const packet::PacketPtr& packet,
+                                      core::nanoseconds_t current_time);
+
     const address::Protocol proto_;
 
     StateTracker& state_tracker_;
@@ -118,7 +121,7 @@ private:
     address::SocketAddr inbound_address_;
     core::MpscQueue<packet::Packet> inbound_queue_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace pipeline

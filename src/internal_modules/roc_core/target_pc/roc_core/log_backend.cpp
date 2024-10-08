@@ -15,7 +15,7 @@ namespace roc {
 namespace core {
 
 LogBackend::LogBackend() {
-    colors_supported_ = Console::instance().colors_supported();
+    colors_supported_ = console_supports_colors();
 }
 
 void LogBackend::handle(const LogMessage& msg) {
@@ -45,6 +45,9 @@ void LogBackend::handle(const LogMessage& msg) {
         break;
     case LogInfo:
         level = "inf";
+        break;
+    case LogNote:
+        level = "nte";
         break;
     case LogDebug:
         level = "dbg";
@@ -76,14 +79,16 @@ void LogBackend::handle(const LogMessage& msg) {
         case LogInfo:
             color = Color_Blue;
             break;
+        case LogNote:
+            color = Color_Green;
+            break;
         default:
             break;
         }
     }
 
-    Console::instance().println_color(color, "%s.%s [%s] [%s] %s: %s%s", timestamp_hi,
-                                      timestamp_lo, tid, level, msg.module, location,
-                                      msg.text);
+    console_println(color, "%s.%s [%s] [%s] %s: %s%s", timestamp_hi, timestamp_lo, tid,
+                    level, msg.module, location, msg.text);
 }
 
 } // namespace core

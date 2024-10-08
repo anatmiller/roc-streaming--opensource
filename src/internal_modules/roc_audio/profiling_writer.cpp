@@ -16,28 +16,26 @@ namespace audio {
 
 ProfilingWriter::ProfilingWriter(IFrameWriter& writer,
                                  core::IArena& arena,
-                                 const audio::SampleSpec& sample_spec,
+                                 const SampleSpec& sample_spec,
                                  ProfilerConfig profiler_config)
     : profiler_(arena, sample_spec, profiler_config)
     , writer_(writer) {
 }
 
-bool ProfilingWriter::is_valid() const {
-    return profiler_.is_valid();
+status::StatusCode ProfilingWriter::init_status() const {
+    return profiler_.init_status();
 }
 
-void ProfilingWriter::write(Frame& frame) {
-    const core::nanoseconds_t elapsed = write_(frame);
+status::StatusCode ProfilingWriter::write(Frame& frame) {
+    const core::nanoseconds_t started = core::timestamp(core::ClockMonotonic);
+    const status::StatusCode code = writer_.write(frame);
+    const core::nanoseconds_t elapsed = core::timestamp(core::ClockMonotonic) - started;
 
-    profiler_.add_frame(frame.duration(), elapsed);
-}
+    if (code == status::StatusOK) {
+        profiler_.add_frame(frame.duration(), elapsed);
+    }
 
-core::nanoseconds_t ProfilingWriter::write_(Frame& frame) {
-    const core::nanoseconds_t start = core::timestamp(core::ClockMonotonic);
-
-    writer_.write(frame);
-
-    return core::timestamp(core::ClockMonotonic) - start;
+    return code;
 }
 
 } // namespace audio

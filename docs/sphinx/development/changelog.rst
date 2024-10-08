@@ -8,20 +8,153 @@ Changelog
 ..
     Features
     C API
-    Bindings
     Command-line tools
-    Applications
     Bug fixes
     Portability
     Security
+    Dependencies
     Internals
     Build system
     Packaging
     Tests
     Documentation
 
+.. _v0.4.0:
+
+Version 0.4.0 (Jun 14, 2024)
+============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.4.0>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/16>`__
+
+Features
+--------
+
+* finish RTCP & XR support (`gh-14 <https://github.com/roc-streaming/roc-toolkit/issues/14>`_, `gh-674 <https://github.com/roc-streaming/roc-toolkit/issues/674>`_)
+
+  * handle all reports from RFC 3550 and some XR reports
+  * implement 2-way RTCP reports exchange
+  * route packets to sessions according to SSRC and CNAME
+  * support RTT calculation based on RTCP XR packets
+  * improve packet validation
+  * support packet padding
+  * support RTCP multicast
+
+* support latency tuning and clock drift compensation on sender instead of receiver (`gh-675 <https://github.com/roc-streaming/roc-toolkit/issues/675>`_)
+* implement backend for WAV files without external dependencies, useful in contrained environments (`gh-576 <https://github.com/roc-streaming/roc-toolkit/issues/576>`_)
+* implement libsndfile backend for audio files (`gh-246 <https://github.com/roc-streaming/roc-toolkit/issues/246>`_)
+
+C API
+-----
+
+* rework latency configuration, introduce concept of latency tuner, available on both sender and receiver (by default enabled on receiver and disabled on sender)
+
+  * replace ``roc_clock_sync_backend`` with ``roc_latency_tuner_backend``
+  * replace ``roc_clock_sync_profile`` with ``roc_latency_tuner_profile``
+
+* rework metrics API (`gh-681 <https://github.com/roc-streaming/roc-toolkit/issues/681>`_)
+
+  * replace ``roc_session_metrics`` with ``roc_connection_metrics``
+  * rework ``roc_sender_metrics`` and ``roc_receiver_metrics``; connection metrics are now available on both sender and receiver
+  * functions for querying metrics (``roc_sender_query()``, ``roc_receiver_query()``, ``roc_sender_encoder_query()``, ``roc_receiver_decoder_query()``) are reworked and simplified
+  * ``niq_latency`` is removed from API
+
+* support 2-way control packet exchange in codecs API (``roc_sender_encoder`` and ``roc_receiver_decoder``)
+
+  * rename ``roc_sender_encoder_push()`` to ``roc_sender_encoder_push_frame()``
+  * rename ``roc_sender_encoder_pop()`` to ``roc_sender_encoder_pop_packet()``
+  * add ``roc_sender_encoder_push_feedback_packet()``
+  * rename ``roc_receiver_decoder_push()`` to ``roc_receiver_decoder_push_packet()``
+  * rename ``roc_receiver_decoder_pop()`` to ``roc_receiver_decoder_pop_frame()``
+  * add ``roc_receiver_decoder_pop_feedback_packet()``
+
+* rename ``roc_version_get()`` to ``roc_version_load()``
+
+Command-line tools
+------------------
+
+* rework latency configuration:
+
+  * rename ``--sess-latency`` to ``--target-latency``
+  * replace ``--clock-backend`` with ``--latency-backend``
+  * replace ``--clock-profile`` with ``--latency-profile``
+
+* rename options:
+
+  * ``--packet-length`` to ``--packet-len``
+  * ``--packet-limit`` to ``--max-packet-size``
+  * ``--frame-length`` to ``--frame-len``
+  * ``--frame-limit`` to ``--max-frame-size``
+
+* support floats for sizes and durations (`gh-654 <https://github.com/roc-streaming/roc-toolkit/issues/654>`_)
+* support ``NO_COLOR`` and ``FORCE_COLOR`` environment variables (`gh-564 <https://github.com/roc-streaming/roc-toolkit/issues/564>`_)
+
+Bug fixes
+---------
+
+* fix routing of FEC packets in encoder/decoder API (``roc_sender_encoder`` and ``roc_receiver_decoder``)
+* fix segfault when roc-send input device omitted (`gh-728 <https://github.com/roc-streaming/roc-toolkit/issues/728>`_)
+* fix work when ``no_playback_timeout`` is lower than ``target_latency`` (`gh-657 <https://github.com/roc-streaming/roc-toolkit/issues/657>`_)
+* fix "unexpected already cancelled task" panic
+* properly handle allocation errors in ``HeapArena``
+
+Portability
+-----------
+
+* add Ubuntu 24.04 to CI (`gh-634 <https://github.com/roc-streaming/roc-toolkit/issues/634>`_)
+* add macOS 14 (arm64) to CI
+* add OpenWrt with uCLibc and musl (MIPS32) to CI
+* fix build on Debian GNU/Hurd
+* improve handling of unknown unix-like platforms in scons
+
+Dependencies
+------------
+
+* new optional dependency: libsndfile, used in CLI tools (`gh-246 <https://github.com/roc-streaming/roc-toolkit/issues/246>`_)
+
+Internals
+---------
+
+* support frame of different format in different parts of pipeline (`gh-547 <https://github.com/roc-streaming/roc-toolkit/issues/547>`_)
+* continue work on configurable encoding (`gh-608 <https://github.com/roc-streaming/roc-toolkit/issues/608>`_)
+* continue work on surround sound support (`gh-86 <https://github.com/roc-streaming/roc-toolkit/issues/86>`_)
+* start work on configurable limits (`gh-610 <https://github.com/roc-streaming/roc-toolkit/issues/610>`_)
+* improvements and refactoring in ``roc_core``
+
+Build system
+------------
+
+* fix ``--build-3rdparty`` on macOS 14
+* fix static library on macOS (``libroc.a``); ensure that all object files have unique names
+* fix macos linker warnings about ``-lc++``
+* fix build with macports installed; don't implicitly use brew if pkg-config is not from brew
+* fix openssl search
+* workaround for brew + pkg-config + openssl error on macOS
+* fix building old pulseaudio on clang 17
+
+Tests
+-----
+
+* improve tests for capture timestamps (CTS)
+* improve RTCP tests (in ``roc_rtcp``, ``roc_pipeline``, and ``public_api``)
+* improve pipeline tests
+* add tests for metrics
+
+Documentation
+-------------
+
+* document audio backends
+* document sponsored work
+
+.. _v0.3.0:
+
 Version 0.3.0 (Nov 22, 2023)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.3.0>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/13>`__
 
 Features
 --------
@@ -104,11 +237,6 @@ C API
 
 * add ``ROC_VERSION`` and ``ROC_VERSION_CODE()``
 
-Bindings
---------
-
-* add script for generating enums in bindings repos (java, go)
-
 Command-line tools
 ------------------
 
@@ -159,8 +287,14 @@ Documentation
 * fix pulseaudio C API examples
 * numerous improvements and updates in sphinx documentation
 
+.. _v0.2.6:
+
 Version 0.2.6 (Nov 05, 2023)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.6>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/15>`__
 
 Packaging
 ---------
@@ -169,8 +303,14 @@ Packaging
 * in debian packages, statically link all dependencies except ``libc``, ``libasound``, ``libpulse``
 * ensure that packages are installable on debian:oldstable, debian:stable, ubuntu:20.04, ubuntu:22.04, ubuntu:latest
 
+.. _v0.2.5:
+
 Version 0.2.5 (Jul 28, 2023)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.5>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/14>`__
 
 Bug fixes
 ---------
@@ -183,8 +323,14 @@ Build system
 * fix compiler type detection when compiler is specified via ``CC`` or ``CXX`` variable
 * export symbols of dependencies built by ``--build-3rdparty`` when building static library (``libroc.a``), to avoid linker errors when using it
 
+.. _v0.2.4:
+
 Version 0.2.4 (May 13, 2023)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.4>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/12>`__
 
 C API
 -----
@@ -230,8 +376,14 @@ Documentation
 
 * minor updates
 
-Version 0.2.3 (Mar 9, 2023)
-===========================
+.. _v0.2.3:
+
+Version 0.2.3 (Mar 09, 2023)
+============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.3>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/11>`__
 
 C API
 -----
@@ -267,8 +419,14 @@ Documentation
 
 * minor updates
 
+.. _v0.2.2:
+
 Version 0.2.2 (Feb 27, 2023)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.2>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/9>`__
 
 C API
 -----
@@ -293,8 +451,14 @@ Documentation
 
 * minor updates
 
+.. _v0.2.1:
+
 Version 0.2.1 (Dec 26, 2022)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.1>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/10>`__
 
 Build system
 ------------
@@ -306,8 +470,14 @@ Documentation
 
 * minor updates
 
+.. _v0.2.0:
+
 Version 0.2.0 (Dec 19, 2022)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.2.0>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/2>`__
 
 Features
 --------
@@ -328,12 +498,6 @@ C API
 * add ``roc_clock_source``
 * add ``roc_version`` and friends
 
-Bindings
---------
-
-* add Go bindings (`roc-go <https://github.com/roc-streaming/roc-go/>`_)
-* add Java bindings (`roc-java <https://github.com/roc-streaming/roc-java/>`_)
-
 Command-line tools
 ------------------
 
@@ -341,12 +505,6 @@ Command-line tools
 * add ``--backup`` option to ``roc-recv``
 * replace ``--frame-size`` with ``--frame-length`` and ``--frame-limit``
 * remove ``--resampler-interp`` and ``--resampler-window``
-
-Applications
-------------
-
-* move PulseAudio modules to `roc-pulse <https://github.com/roc-streaming/roc-pulse/>`_ repo
-* add `roc-droid <https://github.com/roc-streaming/roc-droid/>`_ Android app
 
 Bug fixes
 ---------
@@ -408,8 +566,14 @@ Documentation
 * document Android bulding and testing
 * lots of small updates
 
-Version 0.1.5 (Apr 5, 2020)
-===========================
+.. _v0.1.5:
+
+Version 0.1.5 (Apr 05, 2020)
+============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.5>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/7>`__
 
 Portability
 -----------
@@ -434,8 +598,14 @@ Build system
 * switch to libuv 1.35.0 by default in ``--build-3rdparty``
 * check for unknown names in ``--build-3rdparty``
 
-Version 0.1.4 (Feb 6, 2020)
-===========================
+.. _v0.1.4:
+
+Version 0.1.4 (Feb 06, 2020)
+============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.4>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/6>`__
 
 Internals
 ---------
@@ -458,8 +628,14 @@ Documentation
 * update CONTRIBUTING and "Coding guidelines"
 * update maintainers and contributors list
 
+.. _v0.1.3:
+
 Version 0.1.3 (Oct 21, 2019)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.3>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/5>`__
 
 Command-line tools
 ------------------
@@ -488,8 +664,14 @@ Build system
 * automatically apply memfd patch when building PulseAudio
 * automatically fix libasound includes when building PulseAudio
 
+.. _v0.1.2:
+
 Version 0.1.2 (Aug 14, 2019)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.2>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/4>`__
 
 Bug fixes
 ---------
@@ -528,8 +710,14 @@ Documentation
 * add new pages: "Usage", "Publications", "Licensing", "Contacts", "Authors"
 * replace "Guidelines" page with "Contribution Guidelines", "Coding guidelines", and "Version control"
 
+.. _v0.1.1:
+
 Version 0.1.1 (Jun 18, 2019)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.1>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/3>`__
 
 Bug fixes
 ---------
@@ -563,8 +751,14 @@ Tests
 * fix resampler AWGN tests
 * add travis job to run tests under valgrind
 
+.. _v0.1.0:
+
 Version 0.1.0 (May 28, 2019)
 ============================
+
+.. note::
+
+  `github release <https://github.com/roc-streaming/roc-toolkit/releases/tag/v0.1.0>`__, `github milestone <https://github.com/roc-streaming/roc-toolkit/milestone/1>`__
 
 Features
 --------
@@ -589,11 +783,6 @@ Command-line tools
 ------------------
 
 * initial version of command-line tools (roc-send, roc-recv, roc-conv)
-
-Applications
-------------
-
-* initial version of PulseAudio transport (module-roc-sink, module-roc-sink-input)
 
 Portability
 -----------

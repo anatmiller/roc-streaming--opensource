@@ -27,6 +27,9 @@ jobs:
           - repo: roc-vad
             branch: main
 
+          - repo: rocd
+            branch: main
+
           - repo: rt-tests
             branch: main
 
@@ -37,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Trigger
         run: |

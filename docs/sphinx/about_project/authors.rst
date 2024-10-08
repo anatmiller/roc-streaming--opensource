@@ -90,3 +90,13 @@ Contributors
 * Alyssa Ross <hi@alyssa.is>
 * Arseniy136 <zakhvatkinars@gmail.com>
 * Amandeep Singh <as4456@columbia.edu>
+* Veronika <veronikarovnik@gmail.com>
+* Samuel Thibault <samuel.thibault@ens-lyon.org>
+* James Osborn <https://github.com/JamesOsborn-SE>
+* LinaLinn <lina.cloud@outlook.de>
+* Poussinou <fravincent77@yahoo.fr>
+* J Jeshwanth Reddy <jeshwanth7899@gmail.com>
+* Mihir Singh <mihirsin@usc.edu>
+* Ilia <https://github.com/Izchomatik>
+* Leonardo Invernizzi <lminvernizzi@gmail.com>
+* Pranav Sharma <andrzejx.kopytko@intel.com>

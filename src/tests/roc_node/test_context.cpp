@@ -28,17 +28,17 @@ TEST(context, reference_counting) {
     ContextConfig context_config;
     Context context(context_config, arena);
 
-    CHECK(context.is_valid());
+    LONGS_EQUAL(status::StatusOK, context.init_status());
     CHECK(context.getref() == 0);
 
     {
-        pipeline::SenderConfig sender_config;
+        pipeline::SenderSinkConfig sender_config;
         Sender sender(context, sender_config);
 
         CHECK(context.getref() == 1);
 
         {
-            pipeline::ReceiverConfig receiver_config;
+            pipeline::ReceiverSourceConfig receiver_config;
             Receiver receiver(context, receiver_config);
 
             CHECK(context.getref() == 2);

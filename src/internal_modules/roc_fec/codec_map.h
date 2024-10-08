@@ -12,13 +12,13 @@
 #ifndef ROC_FEC_CODEC_MAP_H_
 #define ROC_FEC_CODEC_MAP_H_
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/singleton.h"
 #include "roc_fec/codec_config.h"
 #include "roc_fec/iblock_decoder.h"
 #include "roc_fec/iblock_encoder.h"
+#include "roc_packet/packet_factory.h"
 
 namespace roc {
 namespace fec {
@@ -31,14 +31,14 @@ public:
         return core::Singleton<CodecMap>::instance();
     }
 
-    //! Check whether given FEC scheme is supported.
-    bool is_supported(packet::FecScheme scheme) const;
-
     //! Get number of supported FEC schemes.
     size_t num_schemes() const;
 
     //! Get FEC scheme ID by index.
     packet::FecScheme nth_scheme(size_t n) const;
+
+    //! Check whether given FEC scheme is supported.
+    bool has_scheme(packet::FecScheme scheme) const;
 
     //! Create a new block encoder.
     //!
@@ -47,9 +47,9 @@ public:
     //!
     //! @returns
     //!  NULL if parameters are invalid or given codec support is not enabled.
-    IBlockEncoder* new_encoder(const CodecConfig& config,
-                               core::BufferFactory<uint8_t>& buffer_factory,
-                               core::IArena& arena) const;
+    IBlockEncoder* new_block_encoder(const CodecConfig& config,
+                                     packet::PacketFactory& packet_factory,
+                                     core::IArena& arena) const;
 
     //! Create a new block decoder.
     //!
@@ -58,9 +58,9 @@ public:
     //!
     //! @returns
     //!  NULL if parameters are invalid or given codec support is not enabled.
-    IBlockDecoder* new_decoder(const CodecConfig& config,
-                               core::BufferFactory<uint8_t>& buffer_factory,
-                               core::IArena& arena) const;
+    IBlockDecoder* new_block_decoder(const CodecConfig& config,
+                                     packet::PacketFactory& packet_factory,
+                                     core::IArena& arena) const;
 
 private:
     friend class core::Singleton<CodecMap>;
@@ -71,11 +71,11 @@ private:
         packet::FecScheme scheme;
 
         IBlockEncoder* (*encoder_ctor)(const CodecConfig& config,
-                                       core::BufferFactory<uint8_t>& buffer_factory,
+                                       packet::PacketFactory& packet_factory,
                                        core::IArena& arena);
 
         IBlockDecoder* (*decoder_ctor)(const CodecConfig& config,
-                                       core::BufferFactory<uint8_t>& buffer_factory,
+                                       packet::PacketFactory& packet_factory,
                                        core::IArena& arena);
     };
 

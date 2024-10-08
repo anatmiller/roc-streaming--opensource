@@ -7,7 +7,7 @@
  */
 
 #include "roc_node/receiver.h"
-#include "roc_address/endpoint_uri_to_str.h"
+#include "roc_address/network_uri_to_str.h"
 #include "roc_address/socket_addr_to_str.h"
 #include "roc_core/log.h"
 #include "roc_core/panic.h"
@@ -15,30 +15,33 @@
 namespace roc {
 namespace node {
 
-Receiver::Receiver(Context& context, const pipeline::ReceiverConfig& pipeline_config)
+Receiver::Receiver(Context& context,
+                   const pipeline::ReceiverSourceConfig& pipeline_config)
     : Node(context)
     , pipeline_(*this,
                 pipeline_config,
+                context.processor_map(),
                 context.encoding_map(),
-                context.packet_factory(),
-                context.byte_buffer_factory(),
-                context.sample_buffer_factory(),
+                context.packet_pool(),
+                context.packet_buffer_pool(),
+                context.frame_pool(),
+                context.frame_buffer_pool(),
                 context.arena())
     , processing_task_(pipeline_)
     , slot_pool_("slot_pool", context.arena())
     , slot_map_(context.arena())
     , party_metrics_(context.arena())
-    , valid_(false) {
+    , frame_factory_(context.frame_pool(), context.frame_buffer_pool())
+    , init_status_(status::NoStatus) {
     roc_log(LogDebug, "receiver node: initializing");
 
-    memset(used_interfaces_, 0, sizeof(used_interfaces_));
-    memset(used_protocols_, 0, sizeof(used_protocols_));
-
-    if (!pipeline_.is_valid()) {
+    if ((init_status_ = pipeline_.init_status()) != status::StatusOK) {
         return;
     }
 
-    valid_ = true;
+    sample_spec_ = pipeline_.source().sample_spec();
+
+    init_status_ = status::StatusOK;
 }
 
 Receiver::~Receiver() {
@@ -55,16 +58,16 @@ Receiver::~Receiver() {
     context().control_loop().wait(processing_task_);
 }
 
-bool Receiver::is_valid() {
-    return valid_;
+status::StatusCode Receiver::init_status() const {
+    return init_status_;
 }
 
 bool Receiver::configure(slot_index_t slot_index,
                          address::Interface iface,
                          const netio::UdpConfig& config) {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(iface < 0);
     roc_panic_if(iface >= (int)address::Iface_Max);
@@ -108,17 +111,17 @@ bool Receiver::configure(slot_index_t slot_index,
 
 bool Receiver::bind(slot_index_t slot_index,
                     address::Interface iface,
-                    address::EndpointUri& uri) {
-    core::Mutex::Lock lock(mutex_);
+                    address::NetworkUri& uri) {
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(iface < 0);
     roc_panic_if(iface >= (int)address::Iface_Max);
 
     roc_log(LogInfo, "receiver node: binding %s interface of slot %lu to %s",
             address::interface_to_str(iface), (unsigned long)slot_index,
-            address::endpoint_uri_to_str(uri).c_str());
+            address::network_uri_to_str(uri).c_str());
 
     core::SharedPtr<Slot> slot = get_slot_(slot_index, true);
     if (!slot) {
@@ -139,21 +142,11 @@ bool Receiver::bind(slot_index_t slot_index,
         return false;
     }
 
-    if (!uri.verify(address::EndpointUri::Subset_Full)) {
+    if (!uri.verify(address::NetworkUri::Subset_Full)) {
         roc_log(LogError,
                 "receiver node:"
                 " can't bind %s interface of slot %lu:"
                 " invalid uri",
-                address::interface_to_str(iface), (unsigned long)slot_index);
-        break_slot_(*slot);
-        return false;
-    }
-
-    if (!check_compatibility_(iface, uri)) {
-        roc_log(LogError,
-                "receiver node:"
-                " can't bind %s interface of slot %lu:"
-                " incompatible with other slots",
                 address::interface_to_str(iface), (unsigned long)slot_index);
         break_slot_(*slot);
         return false;
@@ -237,15 +230,13 @@ bool Receiver::bind(slot_index_t slot_index,
         }
     }
 
-    update_compatibility_(iface, uri);
-
     return true;
 }
 
 bool Receiver::unlink(slot_index_t slot_index) {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_log(LogDebug, "receiver node: unlinking slot %lu", (unsigned long)slot_index);
 
@@ -270,9 +261,9 @@ bool Receiver::get_metrics(slot_index_t slot_index,
                            party_metrics_func_t party_metrics_func,
                            size_t* party_metrics_size,
                            void* party_metrics_arg) {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(!slot_metrics_func);
     roc_panic_if(!party_metrics_func);
@@ -297,7 +288,8 @@ bool Receiver::get_metrics(slot_index_t slot_index,
     }
 
     pipeline::ReceiverLoop::Tasks::QuerySlot task(
-        slot->handle, slot_metrics_, party_metrics_.data(), party_metrics_size);
+        slot->handle, slot_metrics_,
+        party_metrics_.size() != 0 ? party_metrics_.data() : NULL, party_metrics_size);
     if (!pipeline_.schedule_and_wait(task)) {
         roc_log(LogError,
                 "receiver node:"
@@ -320,10 +312,10 @@ bool Receiver::get_metrics(slot_index_t slot_index,
     return true;
 }
 
-bool Receiver::has_broken() {
-    core::Mutex::Lock lock(mutex_);
+bool Receiver::has_broken_slots() {
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     for (core::SharedPtr<Slot> slot = slot_map_.front(); slot;
          slot = slot_map_.nextof(*slot)) {
@@ -335,28 +327,45 @@ bool Receiver::has_broken() {
     return false;
 }
 
-sndio::ISource& Receiver::source() {
-    return pipeline_.source();
-}
+status::StatusCode Receiver::read_frame(void* bytes, size_t n_bytes) {
+    core::Mutex::Lock lock(frame_mutex_);
 
-bool Receiver::check_compatibility_(address::Interface iface,
-                                    const address::EndpointUri& uri) {
-    if (used_interfaces_[iface] && used_protocols_[iface] != uri.proto()) {
-        roc_log(LogError,
-                "receiver node: same interface of all slots should use same protocols:"
-                " other slot uses %s, but this slot tries to use %s",
-                address::proto_to_str(used_protocols_[iface]),
-                address::proto_to_str(uri.proto()));
-        return false;
+    roc_panic_if(init_status_ != status::StatusOK);
+
+    roc_panic_if(!bytes);
+    roc_panic_if(n_bytes == 0);
+
+    if (!sample_spec_.is_valid_frame_size(n_bytes)) {
+        return status::StatusBadBuffer;
     }
 
-    return true;
+    if (!frame_) {
+        if (!(frame_ = frame_factory_.allocate_frame_no_buffer())) {
+            return status::StatusNoMem;
+        }
+    }
+
+    // Attach pre-allocated buffer to frame.
+    // This allows source to write result directly into user buffer.
+    core::BufferView frame_buffer(bytes, n_bytes);
+    frame_->set_buffer(frame_buffer);
+
+    const status::StatusCode code = pipeline_.source().read(
+        *frame_, sample_spec_.bytes_2_stream_timestamp(n_bytes), audio::ModeHard);
+
+    if (code == status::StatusOK && frame_->bytes() != bytes) {
+        // If source used another buffer, copy result from it.
+        memmove(bytes, frame_->bytes(), n_bytes);
+    }
+
+    // Detach buffer, clear frame for re-use.
+    frame_->clear();
+
+    return code;
 }
 
-void Receiver::update_compatibility_(address::Interface iface,
-                                     const address::EndpointUri& uri) {
-    used_interfaces_[iface] = true;
-    used_protocols_[iface] = uri.proto();
+sndio::ISource& Receiver::source() {
+    return pipeline_.source();
 }
 
 core::SharedPtr<Receiver::Slot> Receiver::get_slot_(slot_index_t slot_index,
@@ -365,13 +374,16 @@ core::SharedPtr<Receiver::Slot> Receiver::get_slot_(slot_index_t slot_index,
 
     if (!slot) {
         if (auto_create) {
-            pipeline::ReceiverLoop::Tasks::CreateSlot task;
-            if (!pipeline_.schedule_and_wait(task)) {
+            pipeline::ReceiverSlotConfig slot_config;
+            slot_config.enable_routing = true;
+
+            pipeline::ReceiverLoop::Tasks::CreateSlot slot_task(slot_config);
+            if (!pipeline_.schedule_and_wait(slot_task)) {
                 roc_log(LogError, "receiver node: failed to create slot");
                 return NULL;
             }
 
-            slot = new (slot_pool_) Slot(slot_pool_, slot_index, task.get_handle());
+            slot = new (slot_pool_) Slot(slot_pool_, slot_index, slot_task.get_handle());
             if (!slot) {
                 roc_log(LogError, "receiver node: failed to create slot %lu",
                         (unsigned long)slot_index);

@@ -13,13 +13,13 @@
 #define ROC_AUDIO_SPEEX_RESAMPLER_H_
 
 #include "roc_audio/frame.h"
+#include "roc_audio/frame_factory.h"
 #include "roc_audio/iframe_reader.h"
 #include "roc_audio/iresampler.h"
 #include "roc_audio/resampler_config.h"
 #include "roc_audio/sample.h"
 #include "roc_audio/sample_spec.h"
 #include "roc_core/array.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/rate_limiter.h"
 #include "roc_core/slice.h"
@@ -40,16 +40,16 @@ namespace audio {
 class SpeexResampler : public IResampler, public core::NonCopyable<> {
 public:
     //! Initialize.
-    SpeexResampler(core::IArena& arena,
-                   core::BufferFactory<sample_t>& buffer_factory,
-                   ResamplerProfile profile,
-                   const audio::SampleSpec& in_spec,
-                   const audio::SampleSpec& out_spec);
+    SpeexResampler(const ResamplerConfig& config,
+                   const SampleSpec& in_spec,
+                   const SampleSpec& out_spec,
+                   FrameFactory& frame_factory,
+                   core::IArena& arena);
 
     ~SpeexResampler();
 
-    //! Check if object is successfully constructed.
-    virtual bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Set new resample factor.
     virtual bool set_scaling(size_t input_rate, size_t output_rate, float multiplier);
@@ -91,9 +91,9 @@ private:
     // calculations.
     ssize_t in_latency_diff_;
 
-    core::RateLimiter rate_limiter_;
+    core::RateLimiter report_limiter_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace audio

@@ -17,39 +17,49 @@ namespace roc {
 namespace node {
 
 SenderEncoder::SenderEncoder(Context& context,
-                             const pipeline::SenderConfig& pipeline_config)
+                             const pipeline::SenderSinkConfig& pipeline_config)
     : Node(context)
     , pipeline_(*this,
                 pipeline_config,
+                context.processor_map(),
                 context.encoding_map(),
-                context.packet_factory(),
-                context.byte_buffer_factory(),
-                context.sample_buffer_factory(),
+                context.packet_pool(),
+                context.packet_buffer_pool(),
+                context.frame_pool(),
+                context.frame_buffer_pool(),
                 context.arena())
     , slot_(NULL)
     , processing_task_(pipeline_)
-    , party_metrics_(context.arena())
-    , valid_(false) {
+    , packet_factory_(context.packet_pool(), context.packet_buffer_pool())
+    , frame_factory_(context.frame_pool(), context.frame_buffer_pool())
+    , init_status_(status::NoStatus) {
     roc_log(LogDebug, "sender encoder node: initializing");
 
-    if (!pipeline_.is_valid()) {
-        roc_log(LogError, "sender encoder node: failed to construct pipeline");
+    if ((init_status_ = pipeline_.init_status()) != status::StatusOK) {
+        roc_log(LogError, "sender encoder node: failed to construct pipeline: status=%s",
+                status::code_to_str(pipeline_.init_status()));
         return;
     }
 
-    pipeline::SenderLoop::Tasks::CreateSlot slot_task;
+    sample_spec_ = pipeline_.sink().sample_spec();
+
+    pipeline::SenderSlotConfig slot_config;
+
+    pipeline::SenderLoop::Tasks::CreateSlot slot_task(slot_config);
     if (!pipeline_.schedule_and_wait(slot_task)) {
         roc_log(LogError, "sender encoder node: failed to create slot");
+        // TODO(gh-183): forward status (control ops)
         return;
     }
 
     slot_ = slot_task.get_handle();
     if (!slot_) {
         roc_log(LogError, "sender encoder node: failed to create slot");
+        // TODO(gh-183): forward status (control ops)
         return;
     }
 
-    valid_ = true;
+    init_status_ = status::StatusOK;
 }
 
 SenderEncoder::~SenderEncoder() {
@@ -68,14 +78,18 @@ SenderEncoder::~SenderEncoder() {
     context().control_loop().wait(processing_task_);
 }
 
-bool SenderEncoder::is_valid() const {
-    return valid_;
+status::StatusCode SenderEncoder::init_status() const {
+    return init_status_;
+}
+
+packet::PacketFactory& SenderEncoder::packet_factory() {
+    return packet_factory_;
 }
 
 bool SenderEncoder::activate(address::Interface iface, address::Protocol proto) {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(iface < 0);
     roc_panic_if(iface >= (int)address::Iface_Max);
@@ -116,26 +130,20 @@ bool SenderEncoder::activate(address::Interface iface, address::Protocol proto) 
 bool SenderEncoder::get_metrics(slot_metrics_func_t slot_metrics_func,
                                 void* slot_metrics_arg,
                                 party_metrics_func_t party_metrics_func,
-                                size_t* party_metrics_size,
                                 void* party_metrics_arg) {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(!slot_metrics_func);
     roc_panic_if(!party_metrics_func);
 
-    if (party_metrics_size) {
-        if (!party_metrics_.resize(*party_metrics_size)) {
-            roc_log(LogError,
-                    "sender encoder node:"
-                    " can't get metrics: can't allocate buffer");
-            return false;
-        }
-    }
+    pipeline::SenderSlotMetrics slot_metrics;
+    pipeline::SenderParticipantMetrics party_metrics;
+    size_t party_metrics_size = 1;
 
-    pipeline::SenderLoop::Tasks::QuerySlot task(
-        slot_, slot_metrics_, party_metrics_.data(), party_metrics_size);
+    pipeline::SenderLoop::Tasks::QuerySlot task(slot_, slot_metrics, &party_metrics,
+                                                &party_metrics_size);
     if (!pipeline_.schedule_and_wait(task)) {
         roc_log(LogError,
                 "sender encoder node:"
@@ -144,23 +152,20 @@ bool SenderEncoder::get_metrics(slot_metrics_func_t slot_metrics_func,
     }
 
     if (slot_metrics_arg) {
-        slot_metrics_func(slot_metrics_, slot_metrics_arg);
+        slot_metrics_func(slot_metrics, slot_metrics_arg);
     }
 
-    if (party_metrics_arg && party_metrics_size) {
-        for (size_t party_index = 0; party_index < *party_metrics_size; party_index++) {
-            party_metrics_func(party_metrics_[party_index], party_index,
-                               party_metrics_arg);
-        }
+    if (party_metrics_arg) {
+        party_metrics_func(party_metrics, 0, party_metrics_arg);
     }
 
     return true;
 }
 
 bool SenderEncoder::is_complete() {
-    core::Mutex::Lock lock(mutex_);
+    core::Mutex::Lock lock(control_mutex_);
 
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     pipeline::SenderSlotMetrics slot_metrics;
     pipeline::SenderLoop::Tasks::QuerySlot task(slot_, slot_metrics, NULL, NULL);
@@ -171,12 +176,15 @@ bool SenderEncoder::is_complete() {
     return slot_metrics.is_complete;
 }
 
-status::StatusCode SenderEncoder::read_packet(address::Interface iface,
-                                              packet::PacketPtr& packet) {
-    roc_panic_if_not(is_valid());
+status::StatusCode
+SenderEncoder::read_packet(address::Interface iface, void* bytes, size_t* n_bytes) {
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(iface < 0);
     roc_panic_if(iface >= (int)address::Iface_Max);
+
+    roc_panic_if(!bytes);
+    roc_panic_if(n_bytes == 0);
 
     packet::IReader* reader = endpoint_readers_[iface];
     if (!reader) {
@@ -184,19 +192,67 @@ status::StatusCode SenderEncoder::read_packet(address::Interface iface,
                 "sender encoder node:"
                 " can't read from %s interface: interface not activated",
                 address::interface_to_str(iface));
-        // TODO(gh-183): return StatusNotFound
-        return status::StatusNoData;
+        return status::StatusBadInterface;
     }
 
-    return reader->read(packet);
+    packet::PacketPtr packet;
+    const status::StatusCode code = reader->read(packet, packet::ModeFetch);
+    if (code != status::StatusOK) {
+        return code;
+    }
+
+    if (*n_bytes < packet->buffer().size()) {
+        roc_log(LogError,
+                "sender encoder node:"
+                " not enough space in provided packet:"
+                " provided=%lu needed=%lu",
+                (unsigned long)n_bytes, (unsigned long)packet->buffer().size());
+        return status::StatusBadBuffer;
+    }
+
+    memcpy(bytes, packet->buffer().data(), packet->buffer().size());
+    *n_bytes = packet->buffer().size();
+
+    return status::StatusOK;
 }
 
-status::StatusCode SenderEncoder::write_packet(address::Interface iface,
-                                               const packet::PacketPtr& packet) {
-    roc_panic_if_not(is_valid());
+status::StatusCode
+SenderEncoder::write_packet(address::Interface iface, const void* bytes, size_t n_bytes) {
+    roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(iface < 0);
     roc_panic_if(iface >= (int)address::Iface_Max);
+
+    roc_panic_if(!bytes);
+    roc_panic_if(n_bytes == 0);
+
+    if (n_bytes > packet_factory_.packet_buffer_size()) {
+        roc_log(LogError,
+                "sender encoder node:"
+                " provided packet exceeds maximum packet size (see roc_context_config):"
+                " provided=%lu maximum=%lu",
+                (unsigned long)n_bytes,
+                (unsigned long)packet_factory_.packet_buffer_size());
+        return status::StatusBadBuffer;
+    }
+
+    core::Slice<uint8_t> buffer = packet_factory_.new_packet_buffer();
+    if (!buffer) {
+        roc_log(LogError, "sender encoder node: can't allocate buffer");
+        return status::StatusNoMem;
+    }
+
+    buffer.reslice(0, n_bytes);
+    memcpy(buffer.data(), bytes, n_bytes);
+
+    packet::PacketPtr packet = packet_factory_.new_packet();
+    if (!packet) {
+        roc_log(LogError, "sender encoder node: can't allocate packet");
+        return status::StatusNoMem;
+    }
+
+    packet->add_flags(packet::Packet::FlagUDP);
+    packet->set_buffer(buffer);
 
     packet::IWriter* writer = endpoint_writers_[iface];
     if (!writer) {
@@ -205,23 +261,53 @@ status::StatusCode SenderEncoder::write_packet(address::Interface iface,
                     "sender encoder node:"
                     " can't write to %s interface: interface not activated",
                     address::interface_to_str(iface));
-            // TODO(gh-183): return StatusNotFound
-            return status::StatusUnknown;
+            return status::StatusBadInterface;
         } else {
             roc_log(LogError,
                     "sender encoder node:"
                     " can't write to %s interface: interface doesn't support writing",
                     address::interface_to_str(iface));
-            // TODO(gh-183): return StatusBadOperation
-            return status::StatusUnknown;
+            return status::StatusBadOperation;
         }
     }
 
     return writer->write(packet);
 }
 
+status::StatusCode SenderEncoder::write_frame(const void* bytes, size_t n_bytes) {
+    core::Mutex::Lock lock(frame_mutex_);
+
+    roc_panic_if(init_status_ != status::StatusOK);
+
+    roc_panic_if(!bytes);
+    roc_panic_if(n_bytes == 0);
+
+    if (!sample_spec_.is_valid_frame_size(n_bytes)) {
+        return status::StatusBadBuffer;
+    }
+
+    if (!frame_) {
+        if (!(frame_ = frame_factory_.allocate_frame_no_buffer())) {
+            return status::StatusNoMem;
+        }
+    }
+
+    core::BufferView frame_buffer(const_cast<void*>(bytes), n_bytes);
+
+    frame_->set_buffer(frame_buffer);
+    frame_->set_raw(sample_spec_.is_raw());
+    frame_->set_duration(sample_spec_.bytes_2_stream_timestamp(n_bytes));
+
+    const status::StatusCode code = pipeline_.sink().write(*frame_);
+
+    // Detach buffer, clear frame for re-use.
+    frame_->clear();
+
+    return code;
+}
+
 sndio::ISink& SenderEncoder::sink() {
-    roc_panic_if_not(is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     return pipeline_.sink();
 }

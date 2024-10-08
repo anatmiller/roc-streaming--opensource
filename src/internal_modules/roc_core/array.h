@@ -39,16 +39,6 @@ namespace core {
 //! the array size is small enough.
 template <class T, size_t EmbeddedCapacity = 0> class Array : public NonCopyable<> {
 public:
-    //! Initialize empty array without arena.
-    //! @remarks
-    //!  Array capacity will be limited to the embedded capacity.
-    Array()
-        : data_(NULL)
-        , size_(0)
-        , capacity_(0)
-        , arena_(NULL) {
-    }
-
     //! Initialize empty array with arena.
     //! @remarks
     //!  Array capacity may grow using arena.
@@ -56,7 +46,7 @@ public:
         : data_(NULL)
         , size_(0)
         , capacity_(0)
-        , arena_(&arena) {
+        , arena_(arena) {
     }
 
     ~Array() {
@@ -68,7 +58,6 @@ public:
     }
 
     //! Get maximum number of elements that can be added without reallocation.
-    //! If array has arena, capacity can be grown.
     size_t capacity() const {
         return capacity_;
     }
@@ -87,22 +76,20 @@ public:
     //! @remarks
     //!  Returns null if the array is empty.
     T* data() {
-        if (size_) {
-            return data_;
-        } else {
-            return NULL;
+        if (size_ == 0) {
+            roc_panic("array: is empty");
         }
+        return data_;
     }
 
     //! Get pointer to first element.
     //! @remarks
     //!  Returns null if the array is empty.
     const T* data() const {
-        if (size_) {
-            return data_;
-        } else {
-            return NULL;
+        if (size_ == 0) {
+            roc_panic("array: is empty");
         }
+        return data_;
     }
 
     //! Get element at given position.
@@ -129,7 +116,7 @@ public:
 
     //! Get reference to first element.
     T& front() {
-        if (0 == size_) {
+        if (size_ == 0) {
             roc_panic("array: is empty");
         }
         return data_[0];
@@ -137,7 +124,7 @@ public:
 
     //! Get const reference to first element.
     const T& front() const {
-        if (0 == size_) {
+        if (size_ == 0) {
             roc_panic("array: is empty");
         }
         return data_[0];
@@ -145,7 +132,7 @@ public:
 
     //! Get reference to last element.
     T& back() {
-        if (0 == size_) {
+        if (size_ == 0) {
             roc_panic("array: is empty");
         }
         return data_[size_ - 1];
@@ -153,7 +140,7 @@ public:
 
     //! Get const reference to last element.
     const T& back() const {
-        if (0 == size_) {
+        if (size_ == 0) {
             roc_panic("array: is empty");
         }
         return data_[size_ - 1];
@@ -165,7 +152,7 @@ public:
     //! @note
     //!  has amortized O(1) complexity, O(n) in worst case.
     ROC_ATTR_NODISCARD bool push_back(const T& value) {
-        if (!grow_exp(size() + 1)) {
+        if (!grow_exp(size_ + 1)) {
             return false;
         }
 
@@ -284,16 +271,16 @@ private:
 
         if (n_elems <= EmbeddedCapacity) {
             data = (T*)embedded_data_.memory();
-        } else if (arena_) {
-            data = (T*)arena_->allocate(n_elems * sizeof(T));
+        } else {
+            data = (T*)arena_.allocate(n_elems * sizeof(T));
         }
 
         if (!data) {
             roc_log(LogError,
                     "array: can't allocate memory:"
-                    " current_cap=%lu requested_cap=%lu embedded_cap=%lu has_arena=%d",
+                    " current_cap=%lu requested_cap=%lu embedded_cap=%lu",
                     (unsigned long)capacity_, (unsigned long)n_elems,
-                    (unsigned long)EmbeddedCapacity, (int)(arena_ != NULL));
+                    (unsigned long)EmbeddedCapacity);
         }
 
         return data;
@@ -301,8 +288,7 @@ private:
 
     void deallocate_(T* data) {
         if ((void*)data != (void*)embedded_data_.memory()) {
-            roc_panic_if(!arena_);
-            arena_->deallocate(data);
+            arena_.deallocate(data);
         }
     }
 
@@ -326,7 +312,7 @@ private:
     size_t size_;
     size_t capacity_;
 
-    IArena* arena_;
+    IArena& arena_;
 
     AlignedStorage<EmbeddedCapacity * sizeof(T)> embedded_data_;
 };

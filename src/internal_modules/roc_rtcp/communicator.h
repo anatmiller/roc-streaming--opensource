@@ -12,7 +12,6 @@
 #ifndef ROC_RTCP_COMMUNICATOR_H_
 #define ROC_RTCP_COMMUNICATOR_H_
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/rate_limiter.h"
@@ -49,7 +48,7 @@ namespace rtcp {
 //!
 //! For more details about streams and reports, @see IParticipant.
 //!
-//! This is top-level class of roc_rtcp module, glueing together other components:
+//! This is top-level class of roc_rtcp module, gluing together other components:
 //!   - rtcp::Traverser, to iterate through blocks of compound RTCP packets
 //!   - rtcp::Builder, to construct compound RTCP packets
 //!   - rtcp::Reporter, to maintain hash table of active streams, process and generate
@@ -62,11 +61,10 @@ public:
                  packet::IWriter& packet_writer,
                  packet::IComposer& packet_composer,
                  packet::PacketFactory& packet_factory,
-                 core::BufferFactory<uint8_t>& buffer_factory,
                  core::IArena& arena);
 
-    //! Check if initialization succeeded.
-    bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Get number of tracked destination addresses, for testing.
     size_t total_destinations() const;
@@ -85,7 +83,7 @@ public:
     core::nanoseconds_t generation_deadline(core::nanoseconds_t current_time);
 
     //! Generate and send report packet(s).
-    //! Should be called accroding to generation_deadline().
+    //! Should be called according to generation_deadline().
     //! @p current_time is current time in nanoseconds since Unix epoch.
     //! Invokes IParticipant methods during generation.
     ROC_ATTR_NODISCARD status::StatusCode
@@ -140,7 +138,6 @@ private:
     void log_stats_();
 
     packet::PacketFactory& packet_factory_;
-    core::BufferFactory<uint8_t>& buffer_factory_;
 
     packet::IWriter& packet_writer_;
     packet::IComposer& packet_composer_;
@@ -171,7 +168,7 @@ private:
     size_t generated_packet_count_;
     core::RateLimiter log_limiter_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace rtcp

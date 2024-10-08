@@ -29,7 +29,8 @@ TimestampExtractor::TimestampExtractor(packet::IWriter& writer,
     , rate_limiter_(ReportInterval) {
 }
 
-TimestampExtractor::~TimestampExtractor() {
+status::StatusCode TimestampExtractor::init_status() const {
+    return status::StatusOK;
 }
 
 status::StatusCode TimestampExtractor::write(const packet::PacketPtr& pkt) {
@@ -37,7 +38,7 @@ status::StatusCode TimestampExtractor::write(const packet::PacketPtr& pkt) {
         roc_panic("timestamp extractor: unexpected null packet");
     }
 
-    if (!pkt->rtp()) {
+    if (!pkt->has_flags(packet::Packet::FlagRTP)) {
         roc_panic("timestamp extractor: unexpected non-rtp packet");
     }
 

@@ -22,12 +22,15 @@ namespace rtcp {
 //!
 //! @remarks
 //!  Unlike other composers, this one expects that the buffer already contains valid
-//!  RTCP compound packet. The actual composing is doing eralier in rtcp::Session
+//!  RTCP compound packet. The actual composing is done earlier in rtcp::Communicator
 //!  using rtcp::Builder.
 class Composer : public packet::IComposer, public core::NonCopyable<> {
 public:
     //! Initialization.
-    Composer();
+    explicit Composer(core::IArena& arena);
+
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Adjust buffer to align payload.
     virtual bool

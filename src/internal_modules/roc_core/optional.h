@@ -42,7 +42,7 @@ public:
             ptr_->~T();
         }
         if (ptr && (void*)ptr != storage_.memory()) {
-            roc_panic("optional: attempt to set incorrect object");
+            roc_panic("optional: attempt to initialize with invalid pointer");
         }
         ptr_ = ptr;
     }
@@ -55,7 +55,7 @@ public:
     //! Get underlying object.
     T* operator->() const {
         if (ptr_ == NULL) {
-            roc_panic("optional: attempt to dereference unitialized object");
+            roc_panic("optional: attempt to dereference uninitialized object");
         }
         return ptr_;
     }
@@ -63,7 +63,7 @@ public:
     //! Get underlying reference.
     T& operator*() const {
         if (ptr_ == NULL) {
-            roc_panic("optional: attempt to dereference unitialized object");
+            roc_panic("optional: attempt to dereference uninitialized object");
         }
         return *ptr_;
     }

@@ -10,10 +10,9 @@
 
 #include "test_helpers/mock_scheduler.h"
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/heap_arena.h"
+#include "roc_core/slab_pool.h"
 #include "roc_fec/codec_map.h"
-#include "roc_packet/packet_factory.h"
 #include "roc_pipeline/receiver_loop.h"
 #include "roc_rtp/encoding_map.h"
 
@@ -25,10 +24,21 @@ namespace {
 enum { MaxBufSize = 1000 };
 
 core::HeapArena arena;
-core::BufferFactory<audio::sample_t> sample_buffer_factory(arena, MaxBufSize);
-core::BufferFactory<uint8_t> byte_buffer_factory(arena, MaxBufSize);
-packet::PacketFactory packet_factory(arena);
 
+core::SlabPool<packet::Packet> packet_pool("packet_pool", arena);
+core::SlabPool<core::Buffer>
+    packet_buffer_pool("packet_buffer_pool", arena, sizeof(core::Buffer) + MaxBufSize);
+
+core::SlabPool<audio::Frame> frame_pool("frame_pool", arena);
+core::SlabPool<core::Buffer>
+    frame_buffer_pool("frame_buffer_pool",
+                      arena,
+                      sizeof(core::Buffer) + MaxBufSize * sizeof(audio::sample_t));
+
+packet::PacketFactory packet_factory(packet_pool, packet_buffer_pool);
+audio::FrameFactory frame_factory(frame_pool, frame_buffer_pool);
+
+audio::ProcessorMap processor_map(arena);
 rtp::EncodingMap encoding_map(arena);
 
 class TaskIssuer : public IPipelineTaskCompleter {
@@ -49,7 +59,8 @@ public:
     }
 
     void start() {
-        task_create_slot_ = new ReceiverLoop::Tasks::CreateSlot();
+        ReceiverSlotConfig slot_config;
+        task_create_slot_ = new ReceiverLoop::Tasks::CreateSlot(slot_config);
         pipeline_.schedule(*task_create_slot_, *this);
     }
 
@@ -103,24 +114,26 @@ private:
 TEST_GROUP(receiver_loop) {
     test::MockScheduler scheduler;
 
-    ReceiverConfig config;
+    ReceiverSourceConfig config;
 
     void setup() {
-        config.default_session.latency.tuner_backend = audio::LatencyTunerBackend_Niq;
-        config.default_session.latency.tuner_profile = audio::LatencyTunerProfile_Intact;
+        config.session_defaults.latency.tuner_backend = audio::LatencyTunerBackend_Niq;
+        config.session_defaults.latency.tuner_profile = audio::LatencyTunerProfile_Intact;
+        config.session_defaults.latency.target_latency = DefaultLatency;
     }
 };
 
 TEST(receiver_loop, endpoints_sync) {
-    ReceiverLoop receiver(scheduler, config, encoding_map, packet_factory,
-                          byte_buffer_factory, sample_buffer_factory, arena);
+    ReceiverLoop receiver(scheduler, config, processor_map, encoding_map, packet_pool,
+                          packet_buffer_pool, frame_pool, frame_buffer_pool, arena);
 
-    CHECK(receiver.is_valid());
+    LONGS_EQUAL(status::StatusOK, receiver.init_status());
 
     ReceiverLoop::SlotHandle slot = NULL;
 
     {
-        ReceiverLoop::Tasks::CreateSlot task;
+        ReceiverSlotConfig config;
+        ReceiverLoop::Tasks::CreateSlot task(config);
         CHECK(receiver.schedule_and_wait(task));
         CHECK(task.success());
         CHECK(task.get_handle());
@@ -145,10 +158,10 @@ TEST(receiver_loop, endpoints_sync) {
 }
 
 TEST(receiver_loop, endpoints_async) {
-    ReceiverLoop receiver(scheduler, config, encoding_map, packet_factory,
-                          byte_buffer_factory, sample_buffer_factory, arena);
+    ReceiverLoop receiver(scheduler, config, processor_map, encoding_map, packet_pool,
+                          packet_buffer_pool, frame_pool, frame_buffer_pool, arena);
 
-    CHECK(receiver.is_valid());
+    LONGS_EQUAL(status::StatusOK, receiver.init_status());
 
     TaskIssuer ti(receiver);
 

@@ -17,6 +17,7 @@
 #include "roc_core/noncopyable.h"
 #include "roc_fec/headers.h"
 #include "roc_packet/icomposer.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace fec {
@@ -29,8 +30,14 @@ public:
     //! @remarks
     //!  Composes FECFRAME header or footer and passes the rest to
     //!  @p inner_composer if it's not null.
-    Composer(packet::IComposer* inner_composer)
-        : inner_composer_(inner_composer) {
+    Composer(packet::IComposer* inner_composer, core::IArena& arena)
+        : IComposer(arena)
+        , inner_composer_(inner_composer) {
+    }
+
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const {
+        return status::StatusOK;
     }
 
     //! Adjust buffer to align payload.

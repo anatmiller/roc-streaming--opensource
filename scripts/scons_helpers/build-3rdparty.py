@@ -140,7 +140,10 @@ def unpack(ctx, filename, dirname):
     mkpath('tmp')
 
     tar = tarfile.open('src/'+filename, 'r')
-    tar.extractall('tmp')
+    try:
+        tar.extractall('tmp', filter='data')
+    except:
+        tar.extractall('tmp')
     tar.close()
 
     shutil.move(dirname_tmp, dirname_res)
@@ -381,9 +384,13 @@ def apply_patch(ctx, dir_path, patch_url, patch_name):
         dir_path,
         '../' + patch_name), ignore_error=True)
 
-def format_vars(ctx, disable_launcher=False):
+def format_vars(ctx, disable_launcher=False, env=None):
     ret = []
-    for k, v in ctx.env.items():
+    if not env:
+        env = ctx.env
+    for k, v in env.items():
+        if v is None:
+            continue
         if k == 'COMPILER_LAUNCHER':
             continue
         elif k in ['CC', 'CXX'] and not disable_launcher:
@@ -721,6 +728,28 @@ def detect_compiler_family(env, toolchain, family):
 
     return True
 
+def detect_compiler_presence(compiler):
+    try:
+        subprocess.run([compiler, '-v'],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def detect_native_cc_cxx_compilers():
+    compilers = {}
+    for compiler in ['gcc', 'clang', 'cc']:
+        if detect_compiler_presence(compiler):
+            compilers['CC'] = which(compiler)
+            compilers['CCLD'] = which(compiler)
+            break
+    for compiler in ['g++', 'clang++', 'c++']:
+        if detect_compiler_presence(compiler):
+            compilers['CXX'] = which(compiler)
+            compilers['CXXLD'] = which(compiler)
+            break
+    return compilers
+
 # Guess platform argument for OpenSSL's Configure script basing on toolchain string.
 # (see `./Configure LIST` for a list of all platforms and their format)
 # See also openssl/Configurations/[0-9]*.conf
@@ -1046,7 +1075,7 @@ ctx.pkg_rpath_dir = os.path.join(ctx.pkg_dir, 'rpath')
 ctx.log_file = os.path.join(ctx.pkg_dir, 'build.log')
 ctx.commit_file = os.path.join(ctx.pkg_dir, 'commit')
 
-ctx.prefer_cmake = bool(args.android_platform)
+ctx.prefer_cmake = bool(args.macos_platform or args.android_platform)
 
 #
 # Build package.
@@ -1080,6 +1109,7 @@ if ctx.pkg_name == 'libuv':
             shutil.copy('libuv.a', '../libuv.a')
         changedir(ctx, '..')
     else:
+        subst_files(ctx, 'src/unix/core.c', ' dup3', ' uv__dup3')
         execute(ctx, './autogen.sh')
         execute(ctx, './configure --host={host} {vars} {flags} {opts}'.format(
             host=ctx.toolchain,
@@ -1265,7 +1295,7 @@ elif ctx.pkg_name == 'sox':
     execute(ctx, './configure --host={host} {vars} {flags} {opts}'.format(
         host=ctx.toolchain,
         vars=format_vars(ctx),
-        flags=format_flags(ctx),
+        flags=format_flags(ctx, cflags='-w -Wno-incompatible-function-pointer-types'),
         opts=' '.join([
             '--disable-openmp',
             '--disable-shared',
@@ -1461,6 +1491,7 @@ elif ctx.pkg_name == 'json-c':
     install_tree(ctx, '.', ctx.pkg_inc_dir, include=['*.h'])
     install_files(ctx, '.libs/libjson-c.a', ctx.pkg_lib_dir)
 elif ctx.pkg_name == 'gengetopt':
+    native_compilers = detect_native_cc_cxx_compilers();
     download(
         ctx,
         'https://ftp.gnu.org/gnu/gengetopt/gengetopt-{ctx.pkg_ver}.tar.gz',
@@ -1470,10 +1501,17 @@ elif ctx.pkg_name == 'gengetopt':
         'gengetopt-{ctx.pkg_ver}.tar.gz',
         'gengetopt-{ctx.pkg_ver}')
     changedir(ctx, 'src/gengetopt-{ctx.pkg_ver}')
-    execute(ctx, './configure', clear_env=True)
+    execute(ctx, './configure {vars}'.format(
+        vars=format_vars(ctx, False, env={
+            'CC' : native_compilers.get('CC', None),
+            'CXX' : native_compilers.get('CXX', None),
+            'COMPILER_LAUNCHER' : ctx.env.get('COMPILER_LAUNCHER', None),
+        }),
+        clear_env=True))
     execute_make(ctx, cpu_count=0) # -j is buggy for gengetopt
     install_files(ctx, 'src/gengetopt', ctx.pkg_bin_dir)
 elif ctx.pkg_name == 'ragel':
+    native_compilers = detect_native_cc_cxx_compilers();
     download(
         ctx,
         'https://www.colm.net/files/ragel/ragel-{ctx.pkg_ver}.tar.gz',
@@ -1483,7 +1521,13 @@ elif ctx.pkg_name == 'ragel':
         'ragel-{ctx.pkg_ver}.tar.gz',
         'ragel-{ctx.pkg_ver}')
     changedir(ctx, 'src/ragel-{ctx.pkg_ver}')
-    execute(ctx, './configure', clear_env=True)
+    execute(ctx, './configure {vars}'.format(
+        vars=format_vars(ctx, False, env={
+            'CC' : native_compilers.get('CC', None),
+            'CXX' : native_compilers.get('CXX', None),
+            'COMPILER_LAUNCHER' : ctx.env.get('COMPILER_LAUNCHER', None),
+        }),
+        clear_env=True))
     execute_make(ctx)
     install_files(ctx, 'ragel/ragel', ctx.pkg_bin_dir)
 elif ctx.pkg_name == 'cpputest':
@@ -1518,6 +1562,8 @@ elif ctx.pkg_name == 'cpputest':
                 opts=' '.join([
                     # disable memory leak detection which is too hard to use properly
                     '--disable-memory-leak-detection',
+                    # doesn't work on older platforms
+                    '--disable-extensions',
                     '--enable-static',
                 ])))
         execute_make(ctx)

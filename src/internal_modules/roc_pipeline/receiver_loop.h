@@ -12,12 +12,11 @@
 #ifndef ROC_PIPELINE_RECEIVER_LOOP_H_
 #define ROC_PIPELINE_RECEIVER_LOOP_H_
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
+#include "roc_core/ipool.h"
 #include "roc_core/mutex.h"
 #include "roc_core/optional.h"
 #include "roc_core/stddefs.h"
-#include "roc_packet/packet_factory.h"
 #include "roc_pipeline/config.h"
 #include "roc_pipeline/metrics.h"
 #include "roc_pipeline/pipeline_loop.h"
@@ -59,6 +58,7 @@ public:
         bool (ReceiverLoop::*func_)(Task&); //!< Task implementation method.
 
         ReceiverSlot* slot_;                        //!< Slot.
+        ReceiverSlotConfig slot_config_;            //!< Slot config.
         address::Interface iface_;                  //!< Interface.
         address::Protocol proto_;                   //!< Protocol.
         address::SocketAddr inbound_address_;       //!< Inbound packet address.
@@ -76,7 +76,7 @@ public:
         class CreateSlot : public Task {
         public:
             //! Set task parameters.
-            CreateSlot();
+            CreateSlot(const ReceiverSlotConfig& slot_config);
 
             //! Get created slot handle.
             SlotHandle get_handle() const;
@@ -123,15 +123,18 @@ public:
 
     //! Initialize.
     ReceiverLoop(IPipelineTaskScheduler& scheduler,
-                 const ReceiverConfig& config,
-                 const rtp::EncodingMap& encoding_map,
-                 packet::PacketFactory& packet_factory,
-                 core::BufferFactory<uint8_t>& byte_buffer_factory,
-                 core::BufferFactory<audio::sample_t>& sample_buffer_factory,
+                 const ReceiverSourceConfig& source_config,
+                 audio::ProcessorMap& processor_map,
+                 rtp::EncodingMap& encoding_map,
+                 core::IPool& packet_pool,
+                 core::IPool& packet_buffer_pool,
+                 core::IPool& frame_pool,
+                 core::IPool& frame_buffer_pool,
                  core::IArena& arena);
+    ~ReceiverLoop();
 
     //! Check if the pipeline was successfully constructed.
-    bool is_valid() const;
+    status::StatusCode init_status() const;
 
     //! Get receiver sources.
     //! @remarks
@@ -140,24 +143,32 @@ public:
 
 private:
     // Methods of sndio::ISource
+    virtual sndio::DeviceType type() const;
     virtual sndio::ISink* to_sink();
     virtual sndio::ISource* to_source();
-    virtual sndio::DeviceType type() const;
-    virtual sndio::DeviceState state() const;
-    virtual void pause();
-    virtual bool resume();
-    virtual bool restart();
     virtual audio::SampleSpec sample_spec() const;
-    virtual core::nanoseconds_t latency() const;
+    virtual core::nanoseconds_t frame_length() const;
+    virtual bool has_state() const;
+    virtual sndio::DeviceState state() const;
+    virtual status::StatusCode pause();
+    virtual status::StatusCode resume();
     virtual bool has_latency() const;
+    virtual core::nanoseconds_t latency() const;
     virtual bool has_clock() const;
+    virtual status::StatusCode rewind();
     virtual void reclock(core::nanoseconds_t timestamp);
-    virtual bool read(audio::Frame&);
+    virtual status::StatusCode read(audio::Frame& frame,
+                                    packet::stream_timestamp_t duration,
+                                    audio::FrameReadMode mode);
+    virtual status::StatusCode close();
+    virtual void dispose();
 
     // Methods of PipelineLoop
     virtual core::nanoseconds_t timestamp_imp() const;
     virtual uint64_t tid_imp() const;
-    virtual bool process_subframe_imp(audio::Frame& frame);
+    virtual status::StatusCode process_subframe_imp(audio::Frame& frame,
+                                                    packet::stream_timestamp_t duration,
+                                                    audio::FrameReadMode mode);
     virtual bool process_task_imp(PipelineTask& task);
 
     // Methods for tasks
@@ -174,7 +185,7 @@ private:
 
     const bool auto_reclock_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace pipeline

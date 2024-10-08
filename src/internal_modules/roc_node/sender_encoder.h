@@ -23,6 +23,7 @@
 #include "roc_node/node.h"
 #include "roc_packet/concurrent_queue.h"
 #include "roc_packet/ireader.h"
+#include "roc_packet/packet_factory.h"
 #include "roc_pipeline/ipipeline_task_scheduler.h"
 #include "roc_pipeline/sender_loop.h"
 
@@ -33,13 +34,16 @@ namespace node {
 class SenderEncoder : public Node, private pipeline::IPipelineTaskScheduler {
 public:
     //! Initialize.
-    SenderEncoder(Context& context, const pipeline::SenderConfig& pipeline_config);
+    SenderEncoder(Context& context, const pipeline::SenderSinkConfig& pipeline_config);
 
     //! Deinitialize.
     ~SenderEncoder();
 
-    //! Check if successfully constructed.
-    bool is_valid() const;
+    //! Check if the node was successfully constructed.
+    status::StatusCode init_status() const;
+
+    //! Get packet factory.
+    packet::PacketFactory& packet_factory();
 
     //! Activate interface.
     ROC_ATTR_NODISCARD bool activate(address::Interface iface, address::Protocol proto);
@@ -58,21 +62,26 @@ public:
     ROC_ATTR_NODISCARD bool get_metrics(slot_metrics_func_t slot_metrics_func,
                                         void* slot_metrics_arg,
                                         party_metrics_func_t party_metrics_func,
-                                        size_t* party_metrics_size,
                                         void* party_metrics_arg);
 
     //! Check if everything is connected.
     bool is_complete();
 
     //! Read encoded packet.
-    ROC_ATTR_NODISCARD status::StatusCode read_packet(address::Interface iface,
-                                                      packet::PacketPtr& packet);
+    ROC_ATTR_NODISCARD status::StatusCode
+    read_packet(address::Interface iface, void* bytes, size_t* n_bytes);
 
     //! Write packet for decoding.
     //! @note
     //!  Typically used to deliver control packets with receiver feedback.
-    ROC_ATTR_NODISCARD status::StatusCode write_packet(address::Interface iface,
-                                                       const packet::PacketPtr& packet);
+    ROC_ATTR_NODISCARD status::StatusCode
+    write_packet(address::Interface iface, const void* bytes, size_t n_bytes);
+
+    //! Write frame.
+    //! @remarks
+    //!  Performs necessary checks and allocations on top of ISink::write(),
+    //!  needed when working with byte buffers instead of Frame objects.
+    ROC_ATTR_NODISCARD status::StatusCode write_frame(const void* bytes, size_t n_bytes);
 
     //! Sink for writing frames for encoding.
     sndio::ISink& sink();
@@ -82,7 +91,7 @@ private:
                                           core::nanoseconds_t delay);
     virtual void cancel_task_processing(pipeline::PipelineLoop&);
 
-    core::Mutex mutex_;
+    core::Mutex control_mutex_;
 
     address::SocketAddr dest_address_;
 
@@ -94,10 +103,15 @@ private:
     pipeline::SenderLoop::SlotHandle slot_;
     ctl::ControlLoop::Tasks::PipelineProcessing processing_task_;
 
-    pipeline::SenderSlotMetrics slot_metrics_;
-    core::Array<pipeline::SenderParticipantMetrics, 8> party_metrics_;
+    packet::PacketFactory packet_factory_;
 
-    bool valid_;
+    core::Mutex frame_mutex_;
+
+    audio::FrameFactory frame_factory_;
+    audio::FramePtr frame_;
+    audio::SampleSpec sample_spec_;
+
+    status::StatusCode init_status_;
 };
 
 } // namespace node

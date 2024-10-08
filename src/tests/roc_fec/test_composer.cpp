@@ -8,7 +8,6 @@
 
 #include <CppUTest/TestHarness.h>
 
-#include "roc_core/buffer_factory.h"
 #include "roc_core/heap_arena.h"
 #include "roc_fec/composer.h"
 #include "roc_packet/packet_factory.h"
@@ -17,15 +16,21 @@
 namespace roc {
 namespace fec {
 
+namespace {
+
+enum { BufferSize = 100 };
+
+core::HeapArena arena;
+packet::PacketFactory packet_factory(arena, BufferSize);
+
+} // namespace
+
 TEST_GROUP(composer) {};
 
 TEST(composer, align_footer) {
-    enum { BufferSize = 100, Alignment = 8 };
+    enum { Alignment = 8 };
 
-    core::HeapArena arena;
-    core::BufferFactory<uint8_t> buffer_factory(arena, BufferSize);
-
-    core::SharedPtr<core::Buffer<uint8_t> > buffer = buffer_factory.new_buffer();
+    core::BufferPtr buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
     CHECK((unsigned long)buffer->data() % Alignment == 0);
 
@@ -36,7 +41,7 @@ TEST(composer, align_footer) {
     UNSIGNED_LONGS_EQUAL(BufferSize, slice.capacity());
     UNSIGNED_LONGS_EQUAL((unsigned long)buffer->data(), slice.data());
 
-    Composer<RS8M_PayloadID, Source, Footer> composer(NULL);
+    Composer<RS8M_PayloadID, Source, Footer> composer(NULL, arena);
     CHECK(composer.align(slice, 0, Alignment));
 
     UNSIGNED_LONGS_EQUAL(0, slice.size());
@@ -45,12 +50,9 @@ TEST(composer, align_footer) {
 }
 
 TEST(composer, align_header) {
-    enum { BufferSize = 100, Alignment = 8 };
+    enum { Alignment = 8 };
 
-    core::HeapArena arena;
-    core::BufferFactory<uint8_t> buffer_factory(arena, BufferSize);
-
-    core::SharedPtr<core::Buffer<uint8_t> > buffer = buffer_factory.new_buffer();
+    core::BufferPtr buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
     CHECK((unsigned long)buffer->data() % Alignment == 0);
 
@@ -62,7 +64,7 @@ TEST(composer, align_header) {
     UNSIGNED_LONGS_EQUAL((unsigned long)buffer->data(), slice.data());
     CHECK(((unsigned long)slice.data() + sizeof(RS8M_PayloadID)) % Alignment != 0);
 
-    Composer<RS8M_PayloadID, Source, Header> composer(NULL);
+    Composer<RS8M_PayloadID, Source, Header> composer(NULL, arena);
     CHECK(composer.align(slice, 0, Alignment));
 
     UNSIGNED_LONGS_EQUAL(0, slice.size());
@@ -75,12 +77,9 @@ TEST(composer, align_header) {
 }
 
 TEST(composer, align_outer_header) {
-    enum { BufferSize = 100, Alignment = 8, OuterHeader = 5 };
+    enum { Alignment = 8, OuterHeader = 5 };
 
-    core::HeapArena arena;
-    core::BufferFactory<uint8_t> buffer_factory(arena, BufferSize);
-
-    core::SharedPtr<core::Buffer<uint8_t> > buffer = buffer_factory.new_buffer();
+    core::BufferPtr buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
     CHECK((unsigned long)buffer->data() % Alignment == 0);
 
@@ -93,7 +92,7 @@ TEST(composer, align_outer_header) {
     CHECK(((unsigned long)slice.data() + sizeof(RS8M_PayloadID) + OuterHeader) % Alignment
           != 0);
 
-    Composer<RS8M_PayloadID, Source, Header> composer(NULL);
+    Composer<RS8M_PayloadID, Source, Header> composer(NULL, arena);
     CHECK(composer.align(slice, OuterHeader, Alignment));
 
     UNSIGNED_LONGS_EQUAL(0, slice.size());
@@ -108,19 +107,15 @@ TEST(composer, align_outer_header) {
 }
 
 TEST(composer, packet_size) {
-    enum { BufferSize = 100, Alignment = 8, PayloadSize = 10 };
+    enum { Alignment = 8, PayloadSize = 10 };
 
-    core::HeapArena arena;
-    core::BufferFactory<uint8_t> buffer_factory(arena, BufferSize);
-    packet::PacketFactory packet_factory(arena);
-
-    core::Slice<uint8_t> buffer = buffer_factory.new_buffer();
+    core::Slice<uint8_t> buffer = packet_factory.new_packet_buffer();
     CHECK(buffer);
 
     packet::PacketPtr packet = packet_factory.new_packet();
     CHECK(packet);
 
-    Composer<RS8M_PayloadID, Source, Header> composer(NULL);
+    Composer<RS8M_PayloadID, Source, Header> composer(NULL, arena);
 
     CHECK(composer.align(buffer, 0, Alignment));
     CHECK(composer.prepare(*packet, buffer, PayloadSize));

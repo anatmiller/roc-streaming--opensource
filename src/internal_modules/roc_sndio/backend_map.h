@@ -22,6 +22,10 @@
 #include "roc_sndio/pulseaudio_backend.h"
 #endif // ROC_TARGET_PULSEAUDIO
 
+#ifdef ROC_TARGET_SNDFILE
+#include "roc_sndio/sndfile_backend.h"
+#endif // ROC_TARGET_SNDFILE
+
 #ifdef ROC_TARGET_SOX
 #include "roc_sndio/sox_backend.h"
 #endif // ROC_TARGET_SOX
@@ -51,9 +55,11 @@ public:
     //! Get driver by index.
     const DriverInfo& nth_driver(size_t driver_index) const;
 
-    //! Set internal buffer size for all backends that need it.
-    void set_frame_size(core::nanoseconds_t frame_length,
-                        const audio::SampleSpec& sample_spec);
+    //! Get number of file formats available.
+    size_t num_formats() const;
+
+    //! Get driver by index.
+    const FormatInfo& nth_format(size_t format_index) const;
 
 private:
     friend class core::Singleton<BackendMap>;
@@ -61,13 +67,18 @@ private:
     BackendMap();
 
     void register_backends_();
-    void register_drivers_();
-
     void add_backend_(IBackend*);
+
+    void collect_drivers_();
+    void collect_formats_();
 
 #ifdef ROC_TARGET_PULSEAUDIO
     core::Optional<PulseaudioBackend> pulseaudio_backend_;
 #endif // ROC_TARGET_PULSEAUDIO
+
+#ifdef ROC_TARGET_SNDFILE
+    core::Optional<SndfileBackend> sndfile_backend_;
+#endif // ROC_TARGET_SNDFILE
 
 #ifdef ROC_TARGET_SOX
     core::Optional<SoxBackend> sox_backend_;
@@ -77,6 +88,7 @@ private:
 
     core::Array<IBackend*, MaxBackends> backends_;
     core::Array<DriverInfo, MaxDrivers> drivers_;
+    core::Array<FormatInfo, MaxFormats> formats_;
 };
 
 } // namespace sndio

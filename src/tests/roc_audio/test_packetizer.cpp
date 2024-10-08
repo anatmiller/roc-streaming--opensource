@@ -8,15 +8,14 @@
 
 #include <CppUTest/TestHarness.h>
 
+#include "roc_audio/frame_factory.h"
 #include "roc_audio/iframe_decoder.h"
 #include "roc_audio/iframe_encoder.h"
 #include "roc_audio/packetizer.h"
 #include "roc_audio/pcm_decoder.h"
 #include "roc_audio/pcm_encoder.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/heap_arena.h"
-#include "roc_packet/packet_factory.h"
-#include "roc_packet/queue.h"
+#include "roc_packet/fifo_queue.h"
 #include "roc_rtp/composer.h"
 #include "roc_rtp/identity.h"
 #include "roc_rtp/sequencer.h"
@@ -45,20 +44,30 @@ const core::nanoseconds_t PacketDuration = SamplesPerPacket * core::Second / Sam
 const core::nanoseconds_t Now = 1691499037871419405;
 
 const SampleSpec frame_spec(
-    SampleRate, Sample_RawFormat, ChanLayout_Surround, ChanOrder_Smpte, ChMask);
+    SampleRate, PcmSubformat_Raw, ChanLayout_Surround, ChanOrder_Smpte, ChMask);
 
 const SampleSpec packet_spec(
-    SampleRate, PcmFormat_SInt16_Be, ChanLayout_Surround, ChanOrder_Smpte, ChMask);
+    SampleRate, PcmSubformat_SInt16_Be, ChanLayout_Surround, ChanOrder_Smpte, ChMask);
 
 core::HeapArena arena;
-core::BufferFactory<sample_t> sample_buffer_factory(arena, MaxBufSize);
-core::BufferFactory<uint8_t> byte_buffer_factory(arena, MaxBufSize);
-packet::PacketFactory packet_factory(arena);
+packet::PacketFactory packet_factory(arena, MaxBufSize);
+FrameFactory frame_factory(arena, MaxBufSize * sizeof(sample_t));
 
-rtp::Composer rtp_composer(NULL);
+rtp::Composer rtp_composer(NULL, arena);
 
 sample_t nth_sample(uint8_t n) {
     return sample_t(n) / sample_t(1 << 8);
+}
+
+FramePtr new_frame(size_t samples_per_chan) {
+    FramePtr frame =
+        frame_factory.allocate_frame(samples_per_chan * NumCh * sizeof(sample_t));
+    CHECK(frame);
+
+    frame->set_raw(true);
+    frame->set_duration((packet::stream_timestamp_t)samples_per_chan);
+
+    return frame;
 }
 
 class PacketChecker {
@@ -75,7 +84,7 @@ public:
 
     void read(packet::IReader& reader, size_t n_samples) {
         packet::PacketPtr pp;
-        LONGS_EQUAL(status::StatusOK, reader.read(pp));
+        LONGS_EQUAL(status::StatusOK, reader.read(pp, packet::ModeFetch));
         CHECK(pp);
 
         UNSIGNED_LONGS_EQUAL(packet::Packet::FlagRTP | packet::Packet::FlagAudio
@@ -102,14 +111,15 @@ public:
         CHECK(pp->rtp()->header);
         CHECK(pp->rtp()->payload);
 
-        payload_decoder_.begin(pp->rtp()->stream_timestamp, pp->rtp()->payload.data(),
-                               pp->rtp()->payload.size());
+        payload_decoder_.begin_frame(pp->rtp()->stream_timestamp,
+                                     pp->rtp()->payload.data(),
+                                     pp->rtp()->payload.size());
 
         sample_t samples[SamplesPerPacket * NumCh] = {};
 
-        LONGS_EQUAL(n_samples, payload_decoder_.read(samples, SamplesPerPacket));
+        LONGS_EQUAL(n_samples, payload_decoder_.read_samples(samples, SamplesPerPacket));
 
-        payload_decoder_.end();
+        payload_decoder_.end_frame();
 
         size_t n = 0;
 
@@ -146,30 +156,41 @@ public:
         , capture_ts_(capture_ts) {
     }
 
-    void write(IFrameWriter& writer, size_t num_samples) {
-        core::Slice<sample_t> buf = sample_buffer_factory.new_buffer();
-        CHECK(buf);
+    void write(IFrameWriter& writer, size_t samples_per_chan) {
+        FramePtr frame = new_frame(samples_per_chan);
 
-        buf.reslice(0, num_samples * NumCh);
-
-        for (size_t n = 0; n < num_samples; n++) {
+        for (size_t n = 0; n < samples_per_chan; n++) {
             for (size_t c = 0; c < NumCh; c++) {
-                buf.data()[n * NumCh + c] = nth_sample(value_);
+                frame->raw_samples()[n * NumCh + c] = nth_sample(value_);
                 value_++;
             }
         }
 
-        Frame frame(buf.data(), buf.size());
-        frame.set_capture_timestamp(capture_ts_);
+        frame->set_capture_timestamp(capture_ts_);
         if (capture_ts_) {
-            capture_ts_ += frame_spec.samples_per_chan_2_ns(num_samples);
+            capture_ts_ += frame_spec.samples_per_chan_2_ns(samples_per_chan);
         }
-        writer.write(frame);
+
+        LONGS_EQUAL(status::StatusOK, writer.write(*frame));
     }
 
 private:
     uint8_t value_;
     core::nanoseconds_t capture_ts_;
+};
+
+class StatusWriter : public packet::IWriter {
+public:
+    explicit StatusWriter(status::StatusCode code)
+        : code_(code) {
+    }
+
+    virtual status::StatusCode write(const packet::PacketPtr& packet) {
+        return code_;
+    }
+
+private:
+    status::StatusCode code_;
 };
 
 } // namespace
@@ -179,15 +200,16 @@ TEST_GROUP(packetizer) {};
 TEST(packetizer, one_buffer_one_packet) {
     enum { NumFrames = 10 };
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
     PacketChecker packet_checker(decoder);
@@ -206,15 +228,16 @@ TEST(packetizer, one_buffer_one_packet) {
 TEST(packetizer, one_buffer_multiple_packets) {
     enum { NumPackets = 10 };
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
     PacketChecker packet_checker(decoder);
@@ -233,15 +256,16 @@ TEST(packetizer, multiple_buffers_one_packet) {
 
     CHECK(SamplesPerPacket % FramesPerPacket == 0);
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
     PacketChecker packet_checker(decoder);
@@ -266,15 +290,16 @@ TEST(packetizer, multiple_buffers_multiple_packets) {
         NumPackets = (NumSamples * NumFrames / SamplesPerPacket)
     };
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
     PacketChecker packet_checker(decoder);
@@ -293,15 +318,16 @@ TEST(packetizer, multiple_buffers_multiple_packets) {
 TEST(packetizer, flush) {
     enum { NumIterations = 5, Missing = 10 };
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
     PacketChecker packet_checker(decoder);
@@ -316,7 +342,7 @@ TEST(packetizer, flush) {
         packet_checker.read(packet_queue, SamplesPerPacket);
         packet_checker.read(packet_queue, SamplesPerPacket);
 
-        packetizer.flush();
+        LONGS_EQUAL(status::StatusOK, packetizer.flush());
 
         packet_checker.read(packet_queue, SamplesPerPacket - Missing);
 
@@ -331,15 +357,16 @@ TEST(packetizer, timestamp_zero_cts) {
         NumPackets = (NumSamples * NumFrames / SamplesPerPacket)
     };
 
-    PcmEncoder encoder(packet_spec);
-    PcmDecoder decoder(packet_spec);
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
 
-    packet::Queue packet_queue;
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     const core::nanoseconds_t zero_cts = 0;
 
@@ -360,13 +387,14 @@ TEST(packetizer, timestamp_zero_cts) {
 TEST(packetizer, metrics) {
     enum { NumPackets = 10 };
 
-    PcmEncoder encoder(packet_spec);
-    packet::Queue packet_queue;
+    PcmEncoder encoder(packet_spec, arena);
+    packet::FifoQueue packet_queue;
 
     rtp::Identity identity;
     rtp::Sequencer sequencer(identity, PayloadType);
     Packetizer packetizer(packet_queue, rtp_composer, sequencer, encoder, packet_factory,
-                          byte_buffer_factory, PacketDuration, frame_spec);
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
 
     FrameMaker frame_maker;
 
@@ -375,10 +403,28 @@ TEST(packetizer, metrics) {
 
         const PacketizerMetrics metrics = packetizer.metrics();
 
-        UNSIGNED_LONGS_EQUAL(pn + 1, metrics.packet_count);
+        UNSIGNED_LONGS_EQUAL(pn + 1, metrics.encoded_packets);
         UNSIGNED_LONGS_EQUAL((pn + 1) * SamplesPerPacket * NumCh * sizeof(int16_t),
-                             metrics.payload_count);
+                             metrics.payload_bytes);
     }
+}
+
+TEST(packetizer, forward_error) {
+    PcmEncoder encoder(packet_spec, arena);
+    PcmDecoder decoder(packet_spec, arena);
+
+    StatusWriter packet_writer(status::StatusAbort);
+
+    rtp::Identity identity;
+    rtp::Sequencer sequencer(identity, PayloadType);
+    Packetizer packetizer(packet_writer, rtp_composer, sequencer, encoder, packet_factory,
+                          PacketDuration, frame_spec);
+    LONGS_EQUAL(status::StatusOK, packetizer.init_status());
+
+    FramePtr frame = new_frame(SamplesPerPacket);
+    CHECK(frame);
+
+    LONGS_EQUAL(status::StatusAbort, packetizer.write(*frame));
 }
 
 } // namespace audio

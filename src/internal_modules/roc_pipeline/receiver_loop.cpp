@@ -27,8 +27,9 @@ ReceiverLoop::Task::Task()
     , party_count_(NULL) {
 }
 
-ReceiverLoop::Tasks::CreateSlot::CreateSlot() {
+ReceiverLoop::Tasks::CreateSlot::CreateSlot(const ReceiverSlotConfig& slot_config) {
     func_ = &ReceiverLoop::task_create_slot_;
+    slot_config_ = slot_config;
 }
 
 ReceiverLoop::SlotHandle ReceiverLoop::Tasks::CreateSlot::get_handle() const {
@@ -86,133 +87,132 @@ packet::IWriter* ReceiverLoop::Tasks::AddEndpoint::get_inbound_writer() const {
 }
 
 ReceiverLoop::ReceiverLoop(IPipelineTaskScheduler& scheduler,
-                           const ReceiverConfig& config,
-                           const rtp::EncodingMap& encoding_map,
-                           packet::PacketFactory& packet_factory,
-                           core::BufferFactory<uint8_t>& byte_buffer_factory,
-                           core::BufferFactory<audio::sample_t>& sample_buffer_factory,
+                           const ReceiverSourceConfig& source_config,
+                           audio::ProcessorMap& processor_map,
+                           rtp::EncodingMap& encoding_map,
+                           core::IPool& packet_pool,
+                           core::IPool& packet_buffer_pool,
+                           core::IPool& frame_pool,
+                           core::IPool& frame_buffer_pool,
                            core::IArena& arena)
-    : PipelineLoop(scheduler, config.pipeline_loop, config.common.output_sample_spec)
-    , source_(config,
+    : IDevice(arena)
+    , PipelineLoop(scheduler,
+                   source_config.pipeline_loop,
+                   source_config.common.output_sample_spec,
+                   frame_pool,
+                   frame_buffer_pool,
+                   Dir_ReadFrames)
+    , ISource(arena)
+    , source_(source_config,
+              processor_map,
               encoding_map,
-              packet_factory,
-              byte_buffer_factory,
-              sample_buffer_factory,
+              packet_pool,
+              packet_buffer_pool,
+              frame_pool,
+              frame_buffer_pool,
               arena)
     , ticker_ts_(0)
-    , auto_reclock_(config.common.enable_auto_reclock)
-    , valid_(false) {
-    if (!source_.is_valid()) {
+    , auto_reclock_(source_config.common.enable_auto_reclock)
+    , init_status_(status::NoStatus) {
+    if ((init_status_ = source_.init_status()) != status::StatusOK) {
         return;
     }
 
-    if (config.common.enable_timing) {
-        ticker_.reset(new (ticker_)
-                          core::Ticker(config.common.output_sample_spec.sample_rate()));
-        if (!ticker_) {
-            return;
-        }
+    if (source_config.common.enable_cpu_clock) {
+        ticker_.reset(new (ticker_) core::Ticker(
+            source_config.common.output_sample_spec.sample_rate()));
     }
 
-    valid_ = true;
+    init_status_ = status::StatusOK;
 }
 
-bool ReceiverLoop::is_valid() const {
-    return valid_;
+ReceiverLoop::~ReceiverLoop() {
+}
+
+status::StatusCode ReceiverLoop::init_status() const {
+    return init_status_;
 }
 
 sndio::ISource& ReceiverLoop::source() {
-    roc_panic_if(!is_valid());
-
     return *this;
 }
 
-sndio::ISink* ReceiverLoop::to_sink() {
-    roc_panic_if(!is_valid());
-
-    return NULL;
-}
-
-sndio::ISource* ReceiverLoop::to_source() {
-    roc_panic_if(!is_valid());
-
-    return this;
-}
-
 sndio::DeviceType ReceiverLoop::type() const {
-    roc_panic_if(!is_valid());
-
     core::Mutex::Lock lock(source_mutex_);
 
     return source_.type();
 }
 
-sndio::DeviceState ReceiverLoop::state() const {
-    roc_panic_if(!is_valid());
-
-    core::Mutex::Lock lock(source_mutex_);
-
-    return source_.state();
+sndio::ISink* ReceiverLoop::to_sink() {
+    return NULL;
 }
 
-void ReceiverLoop::pause() {
-    roc_panic_if(!is_valid());
-
-    core::Mutex::Lock lock(source_mutex_);
-
-    source_.pause();
-}
-
-bool ReceiverLoop::resume() {
-    roc_panic_if(!is_valid());
-
-    core::Mutex::Lock lock(source_mutex_);
-
-    return source_.resume();
-}
-
-bool ReceiverLoop::restart() {
-    roc_panic_if(!is_valid());
-
-    core::Mutex::Lock lock(source_mutex_);
-
-    return source_.restart();
+sndio::ISource* ReceiverLoop::to_source() {
+    return this;
 }
 
 audio::SampleSpec ReceiverLoop::sample_spec() const {
-    roc_panic_if_not(is_valid());
-
     core::Mutex::Lock lock(source_mutex_);
 
     return source_.sample_spec();
 }
 
-core::nanoseconds_t ReceiverLoop::latency() const {
-    roc_panic_if_not(is_valid());
-
+core::nanoseconds_t ReceiverLoop::frame_length() const {
     core::Mutex::Lock lock(source_mutex_);
 
-    return source_.latency();
+    return source_.frame_length();
+}
+
+bool ReceiverLoop::has_state() const {
+    core::Mutex::Lock lock(source_mutex_);
+
+    return source_.has_state();
+}
+
+sndio::DeviceState ReceiverLoop::state() const {
+    core::Mutex::Lock lock(source_mutex_);
+
+    return source_.state();
+}
+
+status::StatusCode ReceiverLoop::pause() {
+    core::Mutex::Lock lock(source_mutex_);
+
+    return source_.pause();
+}
+
+status::StatusCode ReceiverLoop::resume() {
+    core::Mutex::Lock lock(source_mutex_);
+
+    return source_.resume();
 }
 
 bool ReceiverLoop::has_latency() const {
-    roc_panic_if(!is_valid());
-
     core::Mutex::Lock lock(source_mutex_);
 
     return source_.has_latency();
 }
 
-bool ReceiverLoop::has_clock() const {
-    roc_panic_if(!is_valid());
+core::nanoseconds_t ReceiverLoop::latency() const {
+    core::Mutex::Lock lock(source_mutex_);
 
+    return source_.latency();
+}
+
+bool ReceiverLoop::has_clock() const {
     core::Mutex::Lock lock(source_mutex_);
 
     return source_.has_clock();
 }
 
+status::StatusCode ReceiverLoop::rewind() {
+    core::Mutex::Lock lock(source_mutex_);
+
+    return source_.rewind();
+}
+
 void ReceiverLoop::reclock(core::nanoseconds_t timestamp) {
-    roc_panic_if(!is_valid());
+    roc_panic_if(init_status_ != status::StatusOK);
 
     if (auto_reclock_) {
         roc_panic("receiver loop: unexpected reclock() call in auto-reclock mode");
@@ -223,27 +223,47 @@ void ReceiverLoop::reclock(core::nanoseconds_t timestamp) {
     source_.reclock(timestamp);
 }
 
-bool ReceiverLoop::read(audio::Frame& frame) {
-    roc_panic_if(!is_valid());
+status::StatusCode ReceiverLoop::read(audio::Frame& frame,
+                                      packet::stream_timestamp_t duration,
+                                      audio::FrameReadMode mode) {
+    roc_panic_if(init_status_ != status::StatusOK);
 
     core::Mutex::Lock lock(source_mutex_);
+
+    if (source_.state() == sndio::DeviceState_Broken) {
+        // Don't go to sleep if we're broke.
+        return status::StatusBadState;
+    }
 
     if (ticker_) {
         ticker_->wait(ticker_ts_);
     }
 
-    // invokes process_subframe_imp() and process_task_imp()
-    if (!process_subframes_and_tasks(frame)) {
-        return false;
+    // Invokes process_subframe_imp() and process_task_imp().
+    const status::StatusCode code = process_subframes_and_tasks(frame, duration, mode);
+
+    roc_panic_if_msg(code <= status::NoStatus || code >= status::MaxStatus,
+                     "receiver loop: invalid status code %d", code);
+
+    if (code == status::StatusOK || code == status::StatusPart) {
+        ticker_ts_ += frame.duration();
+
+        if (auto_reclock_) {
+            source_.reclock(core::timestamp(core::ClockUnix));
+        }
     }
 
-    ticker_ts_ += frame.duration();
+    return code;
+}
 
-    if (auto_reclock_) {
-        source_.reclock(core::timestamp(core::ClockUnix));
-    }
+status::StatusCode ReceiverLoop::close() {
+    core::Mutex::Lock lock(source_mutex_);
 
-    return true;
+    return source_.close();
+}
+
+void ReceiverLoop::dispose() {
+    arena().dispose_object(*this);
 }
 
 core::nanoseconds_t ReceiverLoop::timestamp_imp() const {
@@ -254,11 +274,24 @@ uint64_t ReceiverLoop::tid_imp() const {
     return core::Thread::get_tid();
 }
 
-bool ReceiverLoop::process_subframe_imp(audio::Frame& frame) {
-    // TODO: handle returned deadline and schedule refresh
-    source_.refresh(core::timestamp(core::ClockUnix));
+status::StatusCode ReceiverLoop::process_subframe_imp(audio::Frame& frame,
+                                                      packet::stream_timestamp_t duration,
+                                                      audio::FrameReadMode mode) {
+    status::StatusCode code = status::NoStatus;
 
-    return source_.read(frame);
+    // TODO(gh-674): handle returned deadline and schedule refresh
+    core::nanoseconds_t next_deadline = 0;
+
+    if ((code = source_.refresh(core::timestamp(core::ClockUnix), &next_deadline))
+        != status::StatusOK) {
+        return code;
+    }
+
+    if ((code = source_.read(frame, duration, mode)) != status::StatusOK) {
+        return code;
+    }
+
+    return status::StatusOK;
 }
 
 bool ReceiverLoop::process_task_imp(PipelineTask& basic_task) {
@@ -269,7 +302,7 @@ bool ReceiverLoop::process_task_imp(PipelineTask& basic_task) {
 }
 
 bool ReceiverLoop::task_create_slot_(Task& task) {
-    task.slot_ = source_.create_slot();
+    task.slot_ = source_.create_slot(task.slot_config_);
     return (bool)task.slot_;
 }
 

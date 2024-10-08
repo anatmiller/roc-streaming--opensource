@@ -13,12 +13,13 @@
 #define ROC_AUDIO_CHANNEL_MAPPER_READER_H_
 
 #include "roc_audio/channel_mapper.h"
+#include "roc_audio/frame_factory.h"
 #include "roc_audio/iframe_reader.h"
 #include "roc_audio/sample_spec.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/slice.h"
 #include "roc_core/stddefs.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace audio {
@@ -28,32 +29,30 @@ namespace audio {
 class ChannelMapperReader : public IFrameReader, public core::NonCopyable<> {
 public:
     //! Initialize.
-    ChannelMapperReader(IFrameReader& reader,
-                        core::BufferFactory<sample_t>& buffer_factory,
+    ChannelMapperReader(IFrameReader& frame_reader,
+                        FrameFactory& frame_factory,
                         const SampleSpec& in_spec,
                         const SampleSpec& out_spec);
 
-    //! Check if the object was succefully constructed.
-    bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Read audio frame.
-    virtual bool read(Frame& frame);
+    virtual ROC_ATTR_NODISCARD status::StatusCode
+    read(Frame& frame, packet::stream_timestamp_t duration, FrameReadMode mode);
 
 private:
-    bool read_(sample_t* out_samples,
-               size_t n_samples,
-               unsigned& flags,
-               core::nanoseconds_t& capt_ts);
+    FrameFactory& frame_factory_;
+    IFrameReader& frame_reader_;
 
-    IFrameReader& input_reader_;
-    core::Slice<sample_t> input_buf_;
+    FramePtr in_frame_;
 
     ChannelMapper mapper_;
 
     const SampleSpec in_spec_;
     const SampleSpec out_spec_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace audio

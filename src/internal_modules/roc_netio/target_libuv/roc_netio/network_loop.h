@@ -17,8 +17,8 @@
 #include "roc_address/socket_addr.h"
 #include "roc_core/atomic.h"
 #include "roc_core/attributes.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/iarena.h"
+#include "roc_core/ipool.h"
 #include "roc_core/list.h"
 #include "roc_core/mpsc_queue.h"
 #include "roc_core/mpsc_queue_node.h"
@@ -172,7 +172,7 @@ public:
             //! @remarks
             //!  Gets endpoint hostname, resolves it, and writes the resolved IP address
             //!  and the port from the endpoint to the resulting SocketAddr.
-            ResolveEndpointAddress(const address::EndpointUri& endpoint_uri);
+            ResolveEndpointAddress(const address::NetworkUri& endpoint_uri);
 
             //! Get resolved address.
             //! @pre
@@ -189,17 +189,15 @@ public:
     //! Initialize.
     //! @remarks
     //!  Start background thread if the object was successfully constructed.
-    NetworkLoop(packet::PacketFactory& packet_factory,
-                core::BufferFactory<uint8_t>& buffer_factory,
-                core::IArena& arena);
+    NetworkLoop(core::IPool& packet_pool, core::IPool& buffer_pool, core::IArena& arena);
 
     //! Destroy. Stop all receivers and senders.
     //! @remarks
     //!  Wait until background thread finishes.
     virtual ~NetworkLoop();
 
-    //! Check if the object was successfully constructed.
-    bool is_valid() const;
+    //! Check if control loop was successfully constructed.
+    status::StatusCode init_status() const;
 
     //! Get number of receiver and sender ports.
     size_t num_ports() const;
@@ -249,8 +247,7 @@ private:
     void task_remove_port_(NetworkTask&);
     void task_resolve_endpoint_address_(NetworkTask&);
 
-    packet::PacketFactory& packet_factory_;
-    core::BufferFactory<uint8_t>& buffer_factory_;
+    packet::PacketFactory packet_factory_;
     core::IArena& arena_;
 
     bool started_;
@@ -272,6 +269,8 @@ private:
     core::List<BasicPort> closing_ports_;
 
     core::Atomic<int> num_open_ports_;
+
+    status::StatusCode init_status_;
 };
 
 } // namespace netio

@@ -13,13 +13,13 @@
 #define ROC_AUDIO_BUILTIN_RESAMPLER_H_
 
 #include "roc_audio/frame.h"
+#include "roc_audio/frame_factory.h"
 #include "roc_audio/iframe_reader.h"
 #include "roc_audio/iresampler.h"
 #include "roc_audio/resampler_config.h"
 #include "roc_audio/sample.h"
 #include "roc_audio/sample_spec.h"
 #include "roc_core/array.h"
-#include "roc_core/buffer_factory.h"
 #include "roc_core/noncopyable.h"
 #include "roc_core/slice.h"
 #include "roc_core/stddefs.h"
@@ -39,16 +39,16 @@ namespace audio {
 class BuiltinResampler : public IResampler, public core::NonCopyable<> {
 public:
     //! Initialize.
-    BuiltinResampler(core::IArena& arena,
-                     core::BufferFactory<sample_t>& buffer_factory,
-                     ResamplerProfile profile,
-                     const audio::SampleSpec& in_spec,
-                     const audio::SampleSpec& out_spec);
+    BuiltinResampler(const ResamplerConfig& config,
+                     const SampleSpec& in_spec,
+                     const SampleSpec& out_spec,
+                     FrameFactory& frame_factory,
+                     core::IArena& arena);
 
     ~BuiltinResampler();
 
-    //! Check if object is successfully constructed.
-    virtual bool is_valid() const;
+    //! Check if the object was successfully constructed.
+    virtual status::StatusCode init_status() const;
 
     //! Set new resample factor.
     //! @remarks
@@ -81,7 +81,7 @@ private:
         return i * in_spec_.num_channels() + ch_offset;
     }
 
-    bool alloc_frames_(core::BufferFactory<sample_t>&);
+    bool alloc_frames_(FrameFactory& frame_factory);
 
     bool check_config_() const;
 
@@ -93,8 +93,8 @@ private:
     // (e.g. left -- 0, right -- 1, etc.).
     sample_t resample_(size_t channel_offset);
 
-    const audio::SampleSpec in_spec_;
-    const audio::SampleSpec out_spec_;
+    const SampleSpec in_spec_;
+    const SampleSpec out_spec_;
 
     core::Slice<sample_t> frames_[3];
     size_t n_ready_frames_;
@@ -135,7 +135,7 @@ private:
 
     const sample_t cutoff_freq_;
 
-    bool valid_;
+    status::StatusCode init_status_;
 };
 
 } // namespace audio

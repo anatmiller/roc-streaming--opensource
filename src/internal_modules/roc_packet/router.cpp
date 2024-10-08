@@ -19,17 +19,21 @@ Router::Router(core::IArena& arena)
     : routes_(arena) {
 }
 
-bool Router::add_route(IWriter& writer, const unsigned flags) {
+status::StatusCode Router::init_status() const {
+    return status::StatusOK;
+}
+
+status::StatusCode Router::add_route(IWriter& writer, const unsigned flags) {
     Route r;
     r.writer = &writer;
     r.flags = flags;
 
     if (!routes_.push_back(r)) {
         roc_log(LogError, "router: can't allocate route");
-        return false;
+        return status::StatusNoMem;
     }
 
-    return true;
+    return status::StatusOK;
 }
 
 bool Router::has_source_id(const unsigned flags) {
@@ -55,13 +59,20 @@ status::StatusCode Router::write(const PacketPtr& packet) {
 
     if (Route* route = find_route_(packet->flags())) {
         if (allow_route_(*route, *packet)) {
+            if (packet->has_flags(Packet::FlagUDP)
+                && packet->udp()->queue_timestamp == 0) {
+                packet->udp()->queue_timestamp = core::timestamp(core::ClockUnix);
+            }
+
             return route->writer->write(packet);
         }
     }
 
-    roc_log(LogDebug, "router: can't route packet, dropping");
-    // TODO(gh-183): return status
-    return status::StatusOK;
+    roc_log(LogDebug, "router: can't route packet, dropping: source=%lu flags=%s",
+            (unsigned long)packet->source_id(),
+            packet_flags_to_str(packet->flags()).c_str());
+
+    return status::StatusNoRoute;
 }
 
 Router::Route* Router::find_route_(unsigned flags) {
@@ -96,7 +107,7 @@ bool Router::allow_route_(Route& route, const Packet& packet) {
             route.has_source = true;
             route.is_started = true;
 
-            roc_log(LogDebug,
+            roc_log(LogNote,
                     "router: detected new stream:"
                     " source_id=%lu route_flags=%s packet_flags=%s",
                     (unsigned long)route.source, packet_flags_to_str(route.flags).c_str(),
@@ -114,7 +125,7 @@ bool Router::allow_route_(Route& route, const Packet& packet) {
             route.has_source = false;
             route.is_started = true;
 
-            roc_log(LogDebug,
+            roc_log(LogNote,
                     "router: detected new stream:"
                     " source_id=none route_flags=%s packet_flags=%s",
                     packet_flags_to_str(route.flags).c_str(),
