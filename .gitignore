@@ -59,5 +59,3 @@ debian/roc
 .justfile
 .projectile
 .unisonignore
-.ccls
-scons.sh
