@@ -26,9 +26,13 @@ const core::nanoseconds_t LogInterval = core::Second * 30;
 
 } // namespace
 
-Communicator::Communicator(const Config &config, IParticipant &participant, packet::IWriter &packet_writer,
-                           packet::IComposer &packet_composer, packet::PacketFactory &packet_factory,
-                           core::IArena &arena, dbgio::CsvDumper* dumper)
+Communicator::Communicator(const Config& config,
+                           IParticipant& participant,
+                           packet::IWriter& packet_writer,
+                           packet::IComposer& packet_composer,
+                           packet::PacketFactory& packet_factory,
+                           core::IArena& arena,
+                           dbgio::CsvDumper* dumper)
     : packet_factory_(packet_factory)
     , packet_writer_(packet_writer)
     , packet_composer_(packet_composer)
@@ -87,8 +91,8 @@ status::StatusCode Communicator::process_packet(const packet::PacketPtr& packet,
         return status::StatusOK;
     }
 
-    status::StatusCode status =
-        reporter_.begin_processing(packet->udp()->src_addr, packet->udp()->receive_timestamp);
+    status::StatusCode status = reporter_.begin_processing(
+        packet->udp()->src_addr, packet->udp()->receive_timestamp);
     roc_log(LogTrace, "rtcp communicator: begin_processing(): status=%s",
             status::code_to_str(status));
 

@@ -21,7 +21,10 @@
 namespace roc {
 namespace rtcp {
 
-Reporter::Reporter(const Config &config, IParticipant &participant, core::IArena &arena, dbgio::CsvDumper *dumper)
+Reporter::Reporter(const Config& config,
+                   IParticipant& participant,
+                   core::IArena& arena,
+                   dbgio::CsvDumper* dumper)
     : arena_(arena)
     , participant_(participant)
     , local_source_id_(0)
@@ -1400,8 +1403,8 @@ Reporter::find_stream_(packet::stream_source_t source_id, CreateMode mode) {
         roc_log(LogDebug, "rtcp reporter: creating stream: ssrc=%lu",
                 (unsigned long)source_id);
 
-        stream =
-                new(stream_pool_) Stream(arena_, stream_pool_, source_id, report_time_, config_.rtt, dumper_);
+        stream = new (stream_pool_)
+            Stream(arena_, stream_pool_, source_id, report_time_, config_.rtt, dumper_);
         if (!stream) {
             report_error_ = status::StatusNoMem;
             return NULL;

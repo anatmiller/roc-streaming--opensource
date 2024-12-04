@@ -12,7 +12,9 @@
 namespace roc {
 namespace rtcp {
 
-RttEstimator::RttEstimator(core::IArena &arena, const RttConfig &config, dbgio::CsvDumper *dumper)
+RttEstimator::RttEstimator(core::IArena& arena,
+                           const RttConfig& config,
+                           dbgio::CsvDumper* dumper)
     : config_(config)
     , metrics_()
     , has_metrics_(false)
@@ -100,8 +102,10 @@ void RttEstimator::update(core::nanoseconds_t local_report_ts,
     }
 }
 
-void RttEstimator::dump_(core::nanoseconds_t local_report_ts, core::nanoseconds_t remote_report_ts,
-                         core::nanoseconds_t remote_reply_ts, core::nanoseconds_t local_reply_ts) {
+void RttEstimator::dump_(core::nanoseconds_t local_report_ts,
+                         core::nanoseconds_t remote_report_ts,
+                         core::nanoseconds_t remote_reply_ts,
+                         core::nanoseconds_t local_reply_ts) {
     dbgio::CsvEntry e;
     e.type = 'r';
     e.n_fields = 7;

@@ -57,9 +57,13 @@ namespace rtcp {
 class Communicator : public core::NonCopyable<> {
 public:
     //! Initialize.
-    Communicator(const Config &config, IParticipant &participant, packet::IWriter &packet_writer,
-                 packet::IComposer &packet_composer, packet::PacketFactory &packet_factory,
-                 core::IArena &arena, dbgio::CsvDumper* dumper);
+    Communicator(const Config& config,
+                 IParticipant& participant,
+                 packet::IWriter& packet_writer,
+                 packet::IComposer& packet_composer,
+                 packet::PacketFactory& packet_factory,
+                 core::IArena& arena,
+                 dbgio::CsvDumper* dumper);
 
     //! Check if the object was successfully constructed.
     status::StatusCode init_status() const;

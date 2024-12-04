@@ -13,8 +13,8 @@
 #define ROC_RTCP_RTT_ESTIMATOR_H_
 
 #include "roc_core/time.h"
-#include "roc_packet/units.h"
 #include "roc_dbgio/csv_dumper.h"
+#include "roc_packet/units.h"
 #include "roc_stat/mov_quantile.h"
 
 namespace roc {
@@ -53,7 +53,7 @@ struct RttMetrics {
 class RttEstimator {
 public:
     //! Initialize.
-    RttEstimator(core::IArena &arena, const RttConfig &config, dbgio::CsvDumper *dumper);
+    RttEstimator(core::IArena& arena, const RttConfig& config, dbgio::CsvDumper* dumper);
 
     //! Check whether metrics are already available.
     bool has_metrics() const;
@@ -73,8 +73,10 @@ public:
                 core::nanoseconds_t local_reply_ts);
 
 private:
-    void dump_(core::nanoseconds_t local_report_ts, core::nanoseconds_t remote_report_ts,
-               core::nanoseconds_t remote_reply_ts, core::nanoseconds_t local_reply_ts);
+    void dump_(core::nanoseconds_t local_report_ts,
+               core::nanoseconds_t remote_report_ts,
+               core::nanoseconds_t remote_reply_ts,
+               core::nanoseconds_t local_reply_ts);
 
     const RttConfig config_;
     RttMetrics metrics_;
@@ -83,7 +85,7 @@ private:
     core::nanoseconds_t first_report_ts_;
     core::nanoseconds_t last_report_ts_;
 
-    dbgio::CsvDumper *dumper_;
+    dbgio::CsvDumper* dumper_;
     stat::MovQuantile<core::nanoseconds_t> rtt_stats_;
     stat::MovQuantile<core::nanoseconds_t> clock_offset_stats_;
 };

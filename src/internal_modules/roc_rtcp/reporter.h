@@ -22,6 +22,7 @@
 #include "roc_core/shared_ptr.h"
 #include "roc_core/slab_pool.h"
 #include "roc_core/time.h"
+#include "roc_dbgio/csv_dumper.h"
 #include "roc_packet/ntp.h"
 #include "roc_packet/units.h"
 #include "roc_rtcp/cname.h"
@@ -34,7 +35,6 @@
 #include "roc_rtcp/rtt_estimator.h"
 #include "roc_rtcp/sdes.h"
 #include "roc_status/status_code.h"
-#include "roc_dbgio/csv_dumper.h"
 
 namespace roc {
 namespace rtcp {
@@ -91,7 +91,10 @@ namespace rtcp {
 class Reporter : public core::NonCopyable<> {
 public:
     //! Initialize.
-    Reporter(const Config &config, IParticipant &participant, core::IArena &arena, dbgio::CsvDumper *dumper);
+    Reporter(const Config& config,
+             IParticipant& participant,
+             core::IArena& arena,
+             dbgio::CsvDumper* dumper);
     ~Reporter();
 
     //! Check if the object was successfully constructed.
@@ -262,9 +265,12 @@ private:
     struct Stream : core::RefCounted<Stream, core::PoolAllocation>,
                     core::HashmapNode<>,
                     core::ListNode<> {
-        Stream(core::IArena &arena, core::IPool &pool, packet::stream_source_t source_id,
+        Stream(core::IArena& arena,
+               core::IPool& pool,
+               packet::stream_source_t source_id,
                core::nanoseconds_t report_time,
-               const RttConfig &rtt_config, dbgio::CsvDumper *dumper)
+               const RttConfig& rtt_config,
+               dbgio::CsvDumper* dumper)
             : core::RefCounted<Stream, core::PoolAllocation>(pool)
             , source_id(source_id)
             , has_remote_recv_report(false)
