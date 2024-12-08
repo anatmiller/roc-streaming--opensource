@@ -140,7 +140,11 @@ NetworkLoop::NetworkLoop(core::IPool& packet_pool,
     task_sem_.data = this;
     task_sem_initialized_ = true;
 
-    enable_realtime();
+    if (!enable_realtime()) {
+        roc_log(LogInfo,
+                "network loop: can't set realtime priority of network thread. May need "
+                "to be root");
+    }
     if (!(started_ = Thread::start())) {
         init_status_ = status::StatusErrThread;
         return;

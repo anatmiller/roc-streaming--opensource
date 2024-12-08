@@ -76,8 +76,7 @@ public:
 
     //! Parse and process incoming packet.
     //! Invokes IParticipant methods during processing.
-    ROC_ATTR_NODISCARD status::StatusCode
-    process_packet(const packet::PacketPtr& packet, core::nanoseconds_t current_time);
+    ROC_ATTR_NODISCARD status::StatusCode process_packet(const packet::PacketPtr& packet);
 
     //! When we should generate packets next time.
     //! Returns absolute time.

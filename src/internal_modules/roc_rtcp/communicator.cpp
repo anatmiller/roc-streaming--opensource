@@ -72,8 +72,7 @@ size_t Communicator::total_streams() const {
     return reporter_.total_streams();
 }
 
-status::StatusCode Communicator::process_packet(const packet::PacketPtr& packet,
-                                                core::nanoseconds_t current_time) {
+status::StatusCode Communicator::process_packet(const packet::PacketPtr& packet) {
     roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if_msg(!packet, "rtcp communicator: null packet");
