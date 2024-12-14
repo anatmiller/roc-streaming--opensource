@@ -93,12 +93,13 @@ public:
     //!  Packets are written to inbound_writer() from network thread.
     //!  They don't appear in pipeline immediately. Instead, pipeline thread
     //!  should periodically call pull_packets() to make them available.
-    ROC_ATTR_NODISCARD status::StatusCode pull_packets();
+    ROC_ATTR_NODISCARD status::StatusCode pull_packets(core::nanoseconds_t current_time);
 
 private:
     virtual ROC_ATTR_NODISCARD status::StatusCode write(const packet::PacketPtr& packet);
 
-    status::StatusCode handle_packet_(const packet::PacketPtr& packet);
+    status::StatusCode handle_packet_(const packet::PacketPtr& packet,
+                                      core::nanoseconds_t current_time);
 
     const address::Protocol proto_;
 

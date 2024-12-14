@@ -179,7 +179,6 @@ public:
                     continue;
                 }
                 print_packet_(pp);
-                set_ts_(pp);
                 CHECK(source_writer_);
                 LONGS_EQUAL(status::StatusOK, source_writer_->write(copy_packet_(pp)));
                 n_source_++;
@@ -188,13 +187,11 @@ public:
                     continue;
                 }
                 print_packet_(pp);
-                set_ts_(pp);
                 CHECK(repair_writer_);
                 LONGS_EQUAL(status::StatusOK, repair_writer_->write(copy_packet_(pp)));
                 n_repair_++;
             } else if (pp->flags() & packet::Packet::FlagControl) {
                 print_packet_(pp);
-                set_ts_(pp);
                 CHECK(control_writer_);
                 LONGS_EQUAL(status::StatusOK, control_writer_->write(copy_packet_(pp)));
                 n_control_++;
@@ -227,12 +224,6 @@ private:
             if (pp->rtcp()) {
                 rtcp::print_packet(pp->rtcp()->payload);
             }
-        }
-    }
-
-    void set_ts_(packet::PacketPtr& pp) {
-        if (pp->udp()) {
-            pp->udp()->receive_timestamp = core::timestamp(core::ClockUnix);
         }
     }
 

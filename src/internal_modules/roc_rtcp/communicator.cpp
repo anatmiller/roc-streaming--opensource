@@ -52,8 +52,7 @@ Communicator::Communicator(const Config& config,
     , processed_packet_count_(0)
     , generated_packet_count_(0)
     , log_limiter_(LogInterval)
-    , init_status_(status::NoStatus)
-    , dumper_(dumper) {
+    , init_status_(status::NoStatus) {
     if ((init_status_ = reporter_.init_status()) != status::StatusOK) {
         return;
     }

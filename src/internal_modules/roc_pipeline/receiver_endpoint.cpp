@@ -199,7 +199,7 @@ packet::IWriter& ReceiverEndpoint::inbound_writer() {
     return *this;
 }
 
-status::StatusCode ReceiverEndpoint::pull_packets() {
+status::StatusCode ReceiverEndpoint::pull_packets(core::nanoseconds_t current_time) {
     roc_panic_if(init_status_ != status::StatusOK);
 
     roc_panic_if(!parser_);
@@ -209,7 +209,7 @@ status::StatusCode ReceiverEndpoint::pull_packets() {
     // queue were added in a very short time or are being added currently. It's
     // acceptable to consider such packets late and pull them next time.
     while (packet::PacketPtr packet = inbound_queue_.try_pop_front_exclusive()) {
-        const status::StatusCode code = handle_packet_(packet);
+        const status::StatusCode code = handle_packet_(packet, current_time);
         state_tracker_.unregister_packet();
 
         if (code != status::StatusOK) {
@@ -220,7 +220,13 @@ status::StatusCode ReceiverEndpoint::pull_packets() {
     return status::StatusOK;
 }
 
-status::StatusCode ReceiverEndpoint::handle_packet_(const packet::PacketPtr& packet) {
+status::StatusCode ReceiverEndpoint::handle_packet_(const packet::PacketPtr& packet,
+                                                    core::nanoseconds_t current_time) {
+    // Apparently the packet is not from network, set its TS manually.
+    if (packet->udp() && packet->udp()->receive_timestamp == 0 && current_time != 0) {
+        packet->udp()->receive_timestamp = current_time;
+    }
+
     if (!parser_->parse(*packet, packet->buffer())) {
         roc_log(LogDebug, "receiver endpoint: dropping bad packet: can't parse");
         return status::StatusOK;

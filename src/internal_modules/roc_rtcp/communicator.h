@@ -170,8 +170,6 @@ private:
     core::RateLimiter log_limiter_;
 
     status::StatusCode init_status_;
-
-    dbgio::CsvDumper* dumper_;
 };
 
 } // namespace rtcp

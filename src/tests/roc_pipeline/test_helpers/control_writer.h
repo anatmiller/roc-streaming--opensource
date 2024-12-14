@@ -180,7 +180,6 @@ private:
 
         pp->udp()->src_addr = src_addr_;
         pp->udp()->dst_addr = dst_addr_;
-        pp->udp()->receive_timestamp = core::timestamp(core::ClockUnix);
 
         pp->set_buffer(buffer);
 
