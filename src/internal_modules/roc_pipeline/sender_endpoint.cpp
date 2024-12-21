@@ -210,12 +210,17 @@ status::StatusCode SenderEndpoint::pull_packets(core::nanoseconds_t current_time
 
 status::StatusCode SenderEndpoint::handle_packet_(const packet::PacketPtr& packet,
                                                   core::nanoseconds_t current_time) {
+    // Apparently the packet is not from network, set it's TS manually.
+    if (packet->udp() && packet->udp()->receive_timestamp == 0 && current_time != 0) {
+        packet->udp()->receive_timestamp = current_time;
+    }
+
     if (!parser_->parse(*packet, packet->buffer())) {
         roc_log(LogDebug, "sender endpoint: dropping bad packet: can't parse");
         return status::StatusOK;
     }
 
-    const status::StatusCode code = sender_session_.route_packet(packet, current_time);
+    const status::StatusCode code = sender_session_.route_packet(packet);
 
     if (code == status::StatusNoRoute) {
         roc_log(LogDebug, "sender endpoint: dropping bad packet: can't route");
