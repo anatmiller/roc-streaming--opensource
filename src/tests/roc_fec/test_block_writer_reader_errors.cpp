@@ -87,7 +87,8 @@ TEST_GROUP(block_writer_reader_errors) {
         core::Slice<uint8_t> bp = packet_factory.new_packet_buffer();
         CHECK(bp);
 
-        CHECK(source_composer.prepare(*pp, bp, FECPayloadSize - sizeof(rtp::Header)));
+        CHECK(source_composer.prepare(*pp, bp, FECPayloadSize - sizeof(rtp::Header))
+              == status::StatusOK);
         pp->set_buffer(bp);
 
         pp->add_flags(packet::Packet::FlagAudio | packet::Packet::FlagPrepared);

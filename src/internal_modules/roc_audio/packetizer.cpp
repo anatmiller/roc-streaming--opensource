@@ -196,9 +196,10 @@ status::StatusCode Packetizer::create_packet_() {
         return status::StatusNoMem;
     }
 
-    if (!composer_.prepare(*pp, buffer, payload_size_)) {
+    status::StatusCode status = composer_.prepare(*pp, buffer, payload_size_);
+    if (status != status::StatusOK) {
         roc_log(LogError, "packetizer: can't prepare packet");
-        return status::StatusNoMem;
+        return status;
     }
     pp->add_flags(packet::Packet::FlagPrepared);
 
@@ -213,7 +214,8 @@ void Packetizer::pad_packet_(size_t written_payload_size) {
         return;
     }
 
-    if (!composer_.pad(*packet_, payload_size_ - written_payload_size)) {
+    if (composer_.pad(*packet_, payload_size_ - written_payload_size)
+        != status::StatusOK) {
         roc_panic("packetizer: can't pad packet: orig_size=%lu actual_size=%lu",
                   (unsigned long)payload_size_, (unsigned long)written_payload_size);
     }

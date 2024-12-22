@@ -169,13 +169,13 @@ void test_compose(const PacketTest& test) {
     packet::PacketPtr packet = packet_factory.new_packet();
     CHECK(packet);
 
-    CHECK(test.composer->prepare(*packet, buffer, Test_payload_size));
+    CHECK(test.composer->prepare(*packet, buffer, Test_payload_size) == status::StatusOK);
 
     packet->set_buffer(buffer);
 
     fill_packet(*packet, test.is_rtp);
 
-    CHECK(test.composer->compose(*packet));
+    CHECK(test.composer->compose(*packet) == status::StatusOK);
 
     UNSIGNED_LONGS_EQUAL(test.reference_size, packet->buffer().size());
     for (size_t i = 0; i < test.reference_size; i++) {
@@ -209,13 +209,14 @@ void test_compose_parse(const PacketTest& test) {
     packet::PacketPtr packet1 = packet_factory.new_packet();
     CHECK(packet1);
 
-    CHECK(test.composer->prepare(*packet1, buffer, Test_payload_size));
+    CHECK(test.composer->prepare(*packet1, buffer, Test_payload_size)
+          == status::StatusOK);
 
     packet1->set_buffer(buffer);
 
     fill_packet(*packet1, test.is_rtp);
 
-    CHECK(test.composer->compose(*packet1));
+    CHECK(test.composer->compose(*packet1) == status::StatusOK);
 
     packet::PacketPtr packet2 = packet_factory.new_packet();
     CHECK(packet2);
