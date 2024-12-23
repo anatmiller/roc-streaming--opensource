@@ -13,6 +13,7 @@
 #include "roc_packet/packet_factory.h"
 #include "roc_packet/shipper.h"
 #include "roc_rtp/headers.h"
+#include "roc_status/status_code.h"
 
 namespace roc {
 namespace packet {
@@ -62,21 +63,21 @@ struct MockComposer : public IComposer, public core::NonCopyable<> {
         return status::StatusOK;
     }
 
-    virtual bool align(core::Slice<uint8_t>&, size_t, size_t) {
-        return true;
+    virtual status::StatusCode align(core::Slice<uint8_t>&, size_t, size_t) {
+        return status::StatusOK;
     }
 
-    virtual bool prepare(Packet&, core::Slice<uint8_t>&, size_t) {
-        return true;
+    virtual status::StatusCode prepare(Packet&, core::Slice<uint8_t>&, size_t) {
+        return status::StatusOK;
     }
 
-    virtual bool pad(Packet&, size_t) {
-        return true;
+    virtual status::StatusCode pad(Packet&, size_t) {
+        return status::StatusOK;
     }
 
-    virtual bool compose(Packet&) {
+    virtual status::StatusCode compose(Packet&) {
         ++compose_call_count;
-        return true;
+        return status::StatusOK;
     }
 
     unsigned compose_call_count;

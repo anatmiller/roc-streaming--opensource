@@ -119,9 +119,9 @@ TEST_GROUP(block_writer_reader) {
 
     void recompose_packet(const packet::PacketPtr& p) {
         if (p->flags() & packet::Packet::FlagRepair) {
-            CHECK(repair_composer().compose(*p));
+            CHECK(repair_composer().compose(*p) == status::StatusOK);
         } else {
-            CHECK(source_composer().compose(*p));
+            CHECK(source_composer().compose(*p) == status::StatusOK);
         }
     }
 
@@ -145,7 +145,7 @@ TEST_GROUP(block_writer_reader) {
         if (!composer) {
             composer = &source_composer();
         }
-        CHECK(composer->prepare(*pp, bp, rtp_payload_size));
+        CHECK(composer->prepare(*pp, bp, rtp_payload_size) == status::StatusOK);
 
         pp->set_buffer(bp);
 
